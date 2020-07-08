@@ -1,29 +1,23 @@
 # This is a virtual assistant bot written by Dr.Anonymous
-import pyttsx3
-import speech_recognition as sr
-import pyaudio
 import datetime
-import os, random
-import playsound
+import datetime as dt
 import os
-import wolframalpha
-import wikipedia
-from random import choice
-
-import calendar
+import random
+import subprocess
 import threading
 import time
-import datetime as dt
-import subprocess
-import bs4
-from bs4 import BeautifulSoup as soup
-from urllib.request import urlopen
-#import nooradb
-import pyautogui
-import goslate
 import urllib
-from twilio.rest import Client
+from random import choice
+from urllib.request import urlopen
 
+import goslate
+import playsound
+import pyttsx3
+import speech_recognition as sr
+import wikipedia
+import wolframalpha
+from bs4 import BeautifulSoup as soup
+from twilio.rest import Client
 
 acc_sid = "AC221f4496a708695971f54efbf70d222c"
 
@@ -53,19 +47,23 @@ lang_dict = {'Afar': 'aa', 'Abkhazian': 'ab', 'Afrikaans': 'af', 'Amharic': 'am'
              'Nepali': 'ne', 'Dutch': 'nl', 'Norwegian': 'no', 'Occitan': 'oc', '(Afan) Oromo': 'om', 'Oriya': 'or',
              'Punjabi': 'pa', 'Polish': 'pl', 'Pashto, Pushto': 'ps', 'Portuguese': 'pt', 'Quechua': 'qu',
              'Rhaeto-Romance': 'rm', 'Kirundi': 'rn', 'Romanian': 'ro', 'Russian': 'ru', 'Kinyarwanda': 'rw',
-             'Sanskrit': 'sa', 'Sindhi': 'sd', 'Sangro': 'sg', 'Serbo-Croatian': 'sh', 'Singhalese': 'si', 'Slovak': 'sk',
+             'Sanskrit': 'sa', 'Sindhi': 'sd', 'Sangro': 'sg', 'Serbo-Croatian': 'sh', 'Singhalese': 'si',
+             'Slovak': 'sk',
              'Slovenian': 'sl', 'Samoan': 'sm', 'Shona': 'sn', 'Somali': 'so', 'Albanian': 'sq', 'Serbian': 'sr',
              'Siswati': 'ss', 'Sesotho': 'st', 'Sudanese': 'su', 'Swedish': 'sv', 'Swahili': 'sw', 'Tamil': 'ta',
-             'Tegulu': 'te', 'Tajik': 'tg', 'Thai': 'th', 'Tigrinya': 'ti', 'Turkmen': 'tk', 'Tagalog': 'tl', 'Setswana': 'tn',
-             'Tonga': 'to', 'Turkish': 'tr', 'Tsonga': 'ts', 'Tatar': 'tt', 'Twi': 'tw', 'Uigur': 'ug', 'Ukrainian': 'uk',
-             'Urdu': 'ur', 'Uzbek': 'uz', 'Vietnamese': 'vi', 'Volapuk': 'vo', 'Wolof': 'wo', 'Xhosa': 'xh', 'Yiddish': 'yi',
+             'Tegulu': 'te', 'Tajik': 'tg', 'Thai': 'th', 'Tigrinya': 'ti', 'Turkmen': 'tk', 'Tagalog': 'tl',
+             'Setswana': 'tn',
+             'Tonga': 'to', 'Turkish': 'tr', 'Tsonga': 'ts', 'Tatar': 'tt', 'Twi': 'tw', 'Uigur': 'ug',
+             'Ukrainian': 'uk',
+             'Urdu': 'ur', 'Uzbek': 'uz', 'Vietnamese': 'vi', 'Volapuk': 'vo', 'Wolof': 'wo', 'Xhosa': 'xh',
+             'Yiddish': 'yi',
              'Yoruba': 'yo', 'Zhuang': 'za', 'Chinese': 'zh', 'Zulu': 'zu'}
 time_related = ['days', 'hours', 'minutes', 'seconds', 'minute', 'hour']
 watch_out = ['tomorrow', 'today']
 week_days = ['sundays', 'mondays', 'tuesday', 'wednesday', 'friday', 'saturday']
 meridiem = ['a.m.', 'p.m.']
 set_alarm_prompt = ["alarm"]
-send_reminder =["reminder"]
+send_reminder = ["reminder"]
 
 # Note making keyword
 note_str = ["note", "make a note", "write this down", "take this down"]
@@ -75,21 +73,23 @@ calculator_term = ['-', '+', '*', '/', 'plus', 'minus', 'multiply', 'divided', '
 calculator_command = ["pop me a calculator", "get me a calculator", "i need a calculator"]
 in_calculator_prompt = ["activate calculator"]
 
-#General keys
-wikipedia_prompt = ["about", "who is","who"]
+# General keys
+wikipedia_prompt = ["about", "who is", "who"]
 wolphram_prompt = ["what is", "define", "integrate", "differentiate", "meaning", 'temperature']
 play_song_command = ["play me a song", "song"]
-news_prompt = ["news", "news headline" , "headline"]
+news_prompt = ["news", "news headline", "headline"]
 virtual_key_prompt = ["virtual", "keyboard"]
 translator_prompt = ["translate"]
 editor_mode_prompt = ["editor"]
 
-#About NOORA
+# About NOORA
 my_self_prompt = ["features"]
-functionalities = ["Calculator functions", "setting reminders", "setting alarm", "playing song", "virtual keyboard", "translator function", "note makeingh", "wiki search" , "mathematical computations", "getting news"]
+functionalities = ["Calculator functions", "setting reminders", "setting alarm", "playing song", "virtual keyboard",
+                   "translator function", "note makeingh", "wiki search", "mathematical computations", "getting news"]
 online_features = ["getting news", "language translation", "web searching", "sending reminder"]
-features = ["online features" , "offline features", "blind features", "mathematical features"]
-offline_features = ["getting calculator", "playing song", "basic mathematical computation", "virtual keyboard", "keeping note"]
+features = ["online features", "offline features", "blind features", "mathematical features"]
+offline_features = ["getting calculator", "playing song", "basic mathematical computation", "virtual keyboard",
+                    "keeping note"]
 blind_features = ["activating voice command keyboard", "voice input", "opening apps", "voice typing", "note making"]
 
 global flag
@@ -116,8 +116,6 @@ def get_audio():
     global flag
     try:
 
-
-
         # this function allows voice input command
         r = sr.Recognizer()  # the regognizer class was initiated
         r.energy_threshold = 1200
@@ -127,7 +125,6 @@ def get_audio():
             audio = r.listen(source)
 
             said = ''
-
 
         try:
             print("understanding.......")
@@ -160,13 +157,11 @@ def get_input():
     global flag
     said = input("Enter your text: ")
     if said.lower() == "voice input":
-        flag =True
+        flag = True
         speak("I am switching to voice input")
 
         get_audio()
     return said
-
-
 
 
 def my_Self():
@@ -193,7 +188,6 @@ def my_Self():
     if "self" in text:
         speak(response)
 
-
     speak(response)
 
 
@@ -206,36 +200,36 @@ def answer_questions(text):
             for i in range(len(text_s)):
 
                 if text_s[i] == "who" and text_s[i + 1] == "is":
-                    #try:
+                    # try:
                     res = wikipedia.summary(" ".join(text_s[i + 2:]), sentences=3)
                     return speak(res)
-                    #except:
+                    # except:
                     return speak("Sorry , I dont have anything on " + " ".join(text_s[i + 2:]))
 
                 elif text_s[i] == "tell" and text_s[i + 2] == "about":
 
-                    #try:
+                    # try:
                     res = wikipedia.summary(" ".join(text_s[text_s.index("about") + 1:]))
                     return speak(res)
-                    #except:
-                        #return speak("Sorry , I dont have anything on " + " ".join(text_s[text_s.index("about") + 1:]))
- #   try:
+                    # except:
+                    # return speak("Sorry , I dont have anything on " + " ".join(text_s[text_s.index("about") + 1:]))
+    #   try:
     for c in wolphram_prompt:
         if c in text:
             for i in range(len(text_s)):
-                    if (text_s[i] == "what" and text_s[i + 1] == "is") and "time" not in text:
+                if (text_s[i] == "what" and text_s[i + 1] == "is") and "time" not in text:
 
-                        res = client.query(" ".join(text_s[text_s.index(""):]))
-                        return speak(next(res.results).text)
+                    res = client.query(" ".join(text_s[text_s.index(""):]))
+                    return speak(next(res.results).text)
 
 
-                    elif text_s[i] == "define":
-                        res = client.query(text)
-                        return speak(next(res.results).text)
-                    else:
-                        res = client.query(text)
-                        return speak(next(res.results).text)
-    #except:
+                elif text_s[i] == "define":
+                    res = client.query(text)
+                    return speak(next(res.results).text)
+                else:
+                    res = client.query(text)
+                    return speak(next(res.results).text)
+    # except:
     return speak("I don't know")
     return speak("sory, I dont know")
 
@@ -306,7 +300,8 @@ def set_alarm(text):
                     t = texts[texts.index('p.m.') - 1]
                     if ":" in t:
                         t = t.split(":")
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]), int(t[1]))
+                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+                                                int(t[1]))
                     elif len(t) == 1:
 
                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
@@ -316,7 +311,8 @@ def set_alarm(text):
                     t = texts[texts.index('a.m.') - 1]
                     if ":" in t:
                         t = t.split(":")
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]), int(t[1]))
+                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+                                                int(t[1]))
                     elif len(t) == 1:
                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
                     alarm_time = dt.timedelta(days=1) + temp_time
@@ -333,7 +329,8 @@ def set_alarm(text):
                         if len(t[0]) == 1:
                             t[0] = int(t[0]) + 12
 
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]), int(t[1]))
+                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+                                                 int(t[1]))
 
                     elif len(t) == 1 or len(t) == 2:
                         if len(t) == 1:
@@ -347,13 +344,12 @@ def set_alarm(text):
                     if ":" in t:
                         t = t.split(":")
 
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]), int(t[1]))
+                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+                                                 int(t[1]))
 
                     elif len(t) == 1:
                         alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
                         print(alarm_time)
-
-
 
         if alarm_time:
             if "alarm" in text:
@@ -373,12 +369,13 @@ def set_alarm(text):
 
             return time_f
 
-    except :
+    except:
         speak("That's an invalid input")
         if flag == False:
             change_text()
         elif flag == True:
             change_to_voice()
+
 
 def ring_alarm(mess):
     mag = False
@@ -397,19 +394,14 @@ def ring_alarm(mess):
         elif flag == False:
             text = input("What time do you want to set alarm to: ")
         "This is where the alarm is rang oncee its time"
-        time_set = set_alarm("alarm " +  text)
+        time_set = set_alarm("alarm " + text)
     while dt.datetime.now() < time_set:
         time.sleep(1)
     playsound.playsound("swinging.mp3")
 
 
-
-
-
-
 def in_calculator(text):
     speak("calculator activated")
-
 
     speak("what do u want to compute")
     if flag == False:
@@ -426,9 +418,9 @@ def in_calculator(text):
             sums -= int(text_split[i + 1])
 
         if c == '*' or c == 'multiply':
-            if c == "multiply" :
+            if c == "multiply":
                 sums *= int(text_split[i + 2])
-            elif c == "*" :
+            elif c == "*":
                 sums *= int(text_split[i + 1])
 
         if c == '/' or c == 'divided':
@@ -474,7 +466,7 @@ def get_mp3():
         file = "C:\Music\\" + randomfile
 
         playsound.playsound(file, True)
-    except playsound.PlaysoundException :
+    except playsound.PlaysoundException:
         speak("An Mp3 was not generated")
 
 
@@ -482,7 +474,8 @@ def show_calculator():
     speak("ok sir")
     subprocess.Popen(['C:\\Windows\\System32\\calc.exe'])
 
-#def word_processor():
+
+# def word_processor():
 #    speak ("ok sir")
 #   subprocess.Popen(pass)
 
@@ -512,8 +505,6 @@ def translators():
         speak("No Network")
 
 
-
-
 # Your Account Sid and Auth Token from twilio.com/console
 
 def text_me(message):
@@ -538,7 +529,7 @@ def whatsapp_reminder(mess):
 
     if mag:
         mess = " ".join(mess)
-        time_set = set_alarm("reminder " +mess)
+        time_set = set_alarm("reminder " + mess)
         if flag:
             speak("what is the reminder message")
             message = get_audio()
@@ -555,7 +546,7 @@ def whatsapp_reminder(mess):
             messages = get_audio()
         elif flag == False:
             text = input("What time do you want to set reminder to: ")
-            time_set=  set_alarm("reminder " + text)
+            time_set = set_alarm("reminder " + text)
             speak("what is the reminder messagee")
             messages = input("type the mesage: ")
 
@@ -572,6 +563,7 @@ def whatsapp_reminder(mess):
                            to=to_whatsapp_number)
     speak("message sent")
 
+
 def get_news_head():
     try:
 
@@ -587,17 +579,18 @@ def get_news_head():
             speak(news.title.text)
     except urllib.error.URLError:
         speak("Sorry, Network is down now")
-        if flag :
+        if flag:
             change_to_voice()
         if flag == False:
             change_text()
+
 
 def actions(text):
     text_list = text.split(' ')
     count = 0
     for c in text_list:
         print(c)
-        if  c in wikipedia_prompt or text in wikipedia_prompt :
+        if c in wikipedia_prompt or text in wikipedia_prompt:
             return answer_questions(text)
         if c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt:
             return answer_questions(text)
@@ -628,24 +621,25 @@ def actions(text):
             pass
         elif c in translator_prompt or text in translator_prompt:
             return translators()
-        elif c in editor_mode_prompt or text in translator_prompt  :
+        elif c in editor_mode_prompt or text in translator_prompt:
             pass
         elif c in send_reminder or text in send_reminder:
             mess = text.split(" ")
             thread_object = threading.Thread(target=whatsapp_reminder, args=[mess])
             thread_object.start()
             time.sleep(7)
-        count +=1
+        count += 1
     speak("didnt get")
     if flag == True:
         change_to_voice()
     elif flag == False:
         change_text()
 
+
 def wake_up(text):
     # This function wakes her up
     try:
-        wakeup_call = ["Nura", "noora", "Nora" , "nora"]  # when he hears this (Her name), He wakes up
+        wakeup_call = ["Nura", "noora", "Nora", "nora"]  # when he hears this (Her name), He wakes up
         greetings = ["Hello sir", "Hi Ahmad", "yes Doctor"]
 
         for t in text.lower().split(" "):
@@ -666,11 +660,11 @@ def wake_up(text):
             return change_to_voice()
         elif flag == False:
             return change_text()
-    except :
+    except:
         return
 
 
-#def change_to_voice():
+# def change_to_voice():
 
 
 #   while flag:
@@ -700,6 +694,7 @@ def change_to_voice():
 
                     return change_to_voice()
 
+
 def change_text():
     global flag
     global text
@@ -714,4 +709,6 @@ def change_text():
                 actions(text)
 
                 return change_text()
+
+
 change_text()
