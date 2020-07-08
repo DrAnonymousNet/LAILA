@@ -9,8 +9,6 @@ import time
 import urllib
 from random import choice
 from urllib.request import urlopen
-
-# import nooradb
 import goslate
 import playsound
 import pyttsx3
@@ -23,8 +21,8 @@ from twilio.rest import Client
 from nooradb import *
 
 # in the block above, all needed library are installed
-global flag
-flag = False
+global flag, text
+# flag = False
 
 app_id = "86AT7X-523WTL6JVH"
 client = wolframalpha.Client(app_id=app_id)
@@ -75,7 +73,7 @@ def get_audio():
                 return change_to_voice()
 
         return said.lower()
-    except:
+    finally:
         return get_audio()
 
 
@@ -117,7 +115,7 @@ def change_to_voice():
         print(text)
         if text is not None:  # This will only run if the value returned tot the text variable is not none
             while True:
-                while flag == True:
+                while flag is True:
                     print(flag)
                     actions(text)  # The Action function execute the command given
 
@@ -136,52 +134,48 @@ def change_text():
     print(text)
     if text is not None:
         while True:
-            while flag == False:
+            while flag is False:
                 print(flag)
                 actions(text)
 
                 return change_text()
 
 
-def wake_up(text):
+def wake_up(_text):
     global flag
     # This function receives a parameter from change_to_voice or change_text
     # depending on the value of flag and return the command given back to either of them
     # which is inturn executed by the action function
-    try:
-        print(text)
-        wakeup_call = ["laila", "elena", "leila", "leyla", "layla",
-                       "lila"]  # when he hears this (Her name), He wakes up
-        greetings = ["Hello Ahmad", "Hi Ahmad", "yes boss"]
-        response = ["How can i help you", "What do u need sir"]
+    # try:
+    wakeup_call = ["laila", "elena", "leila", "leyla", "layla",
+                   "lila"]  # when he hears this (Her name), He wakes up
+    greetings = ["Hello Ahmad", "Hi Ahmad", "yes boss"]
+    response = ["How can i help you", "What do u need sir"]
 
-        for t in text.lower().split(" "):
+    for t in _text.lower().split(" "):
+        if t in wakeup_call and len(_text.split(' ')) <= 2:
+            speak(choice(greetings))  # This gives randomness to the greeting
 
-            if t in wakeup_call and len(text.split(' ')) <= 2:
-                speak(choice(greetings))  # This gives randomness to the greeting
+            if flag is False:
 
-                if flag == False:
+                speak(choice(response))
+                _text = input("what do u want:").lower()
 
-                    speak(choice(response))
-                    text = input("what do u want:").lower()
+                return _text
+            elif flag is True:
+                speak(choice(response))
+                _text = get_audio().lower()
 
-                    return text
-                elif flag == True:
-                    speak(choice(response))
-                    text = get_audio().lower()
+                return _text
+        elif t in wakeup_call and len(_text.split(" ")) > 2:
 
-                    return text
-            elif t in wakeup_call and len(text.split(" ")) > 2:
-
-                return text
-        # If  no command was given or her name is not heard, the a none value will be returned back to either of the the that are mentioned
-        # ABOVE
-        if flag:
-            return change_to_voice()
-        elif flag == False:
-            return change_text()
-    except:
-        return
+            return _text
+    # If  no command was given or her name is not heard, the a none value will be returned back to either of the the that are mentioned
+    # ABOVE
+    if flag:
+        return change_to_voice()
+    elif flag is False:
+        return change_text()
 
 
 def actions(text):
