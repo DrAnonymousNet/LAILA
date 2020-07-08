@@ -48,7 +48,8 @@ def get_audio():
         r = sr.Recognizer()  # the recognizer class was initiated
         r.energy_threshold = 1200
         with sr.Microphone() as source:
-            print("listning.............")
+            r.adjust_for_ambient_noise(source)
+            print("listening.............")
 
             audio = r.listen(source)
 
@@ -183,7 +184,6 @@ def actions(text):
     text_list = text.split(' ')
     count = 0
     for c in text_list:
-        print(c)
         if c in wikipedia_prompt or text in wikipedia_prompt:  # and "yourself" not in text:
             print("ok")
             return answer_questions(text)
