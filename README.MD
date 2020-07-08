@@ -31,3 +31,5 @@ python3 setup.py install
 [] Write a better readme and installation procedure.
 
 [] Remove the number of `try-except` unhealthy code.
+
+[] Fix speech crash issue on Linux ( @Youngestdev's machine)
