@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
    name='Laila',
    version='1.0',
-   description='A bot',
+   description='A smart virtual assistant bot',
    author='Dr. Anonymous',
    author_email='fix your mail here',
    packages=['Laila'],
