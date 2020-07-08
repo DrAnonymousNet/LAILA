@@ -9,6 +9,7 @@ import time
 import urllib
 from random import choice
 from urllib.request import urlopen
+
 import goslate
 import playsound
 import pyttsx3
@@ -22,7 +23,7 @@ from nooradb import *
 
 # in the block above, all needed library are installed
 global flag, text
-# flag = False
+flag = False
 
 app_id = "86AT7X-523WTL6JVH"
 client = wolframalpha.Client(app_id=app_id)
@@ -44,7 +45,7 @@ def get_audio():
     global flag
     try:
         # this function allows voice input command
-        r = sr.Recognizer()  # the regognizer class was initiated
+        r = sr.Recognizer()  # the recognizer class was initiated
         r.energy_threshold = 1200
         with sr.Microphone() as source:
             print("listning.............")
@@ -59,7 +60,7 @@ def get_audio():
             print(said)
         except sr.RequestError:
             speak('HI, THE NETWORK IS DOWN, DO YOU WANT TO SWITCH  TO TEXT INPUT')
-            yes_no = input('YESS/NO: ')
+            yes_no = input('YES/NO: ')
             if yes_no.lower() == "yes":
                 speak("TEXT INPUT ACTIVATED")
 
@@ -92,7 +93,7 @@ def get_input():
     said = said.lower()
 
     # At any moment you feel like changing to voice input, then this haandles it
-    if said.lower() == "voice input":
+    if said == "voice input":
         flag = True
         speak("I am switching to voice input")
 
@@ -105,18 +106,15 @@ def change_to_voice():
     voice input"""
     global text
     global flag
-    print(flag)
     while True:
         text = get_audio()  # We listen to a command here, and its stored in text variable
 
         text = wake_up(text)  # Text is passed into the wake up call, which chelk iff the wake up call is heard
         # and when the wakeup call is heard, it awiat your command. and the command given is
         # returned and pass into text variable
-        print(text)
         if text is not None:  # This will only run if the value returned tot the text variable is not none
             while True:
                 while flag is True:
-                    print(flag)
                     actions(text)  # The Action function execute the command given
 
                     return change_to_voice()  # This will forever returned so far flag is true
@@ -129,13 +127,10 @@ def change_text():
 
     flag = False
     text = input("Enter your command: ")
-    print(text)
     text = wake_up(text)
-    print(text)
     if text is not None:
         while True:
             while flag is False:
-                print(flag)
                 actions(text)
 
                 return change_text()
@@ -146,10 +141,10 @@ def wake_up(_text):
     # This function receives a parameter from change_to_voice or change_text
     # depending on the value of flag and return the command given back to either of them
     # which is inturn executed by the action function
-    # try:
+    caller_name = os.environ['LOGNAME']
     wakeup_call = ["laila", "elena", "leila", "leyla", "layla",
                    "lila"]  # when he hears this (Her name), He wakes up
-    greetings = ["Hello Ahmad", "Hi Ahmad", "yes boss"]
+    greetings = ["Hello {}".format(caller_name), "Hi {}".format(caller_name), "You called?"]
     response = ["How can i help you", "What do u need sir"]
 
     for t in _text.lower().split(" "):
@@ -219,7 +214,7 @@ def actions(text):
             thread_object.start()
 
             time.sleep(2)
-            if flag == True:
+            if flag is True:
                 return change_to_voice()
 
             return change_text()
@@ -266,16 +261,16 @@ def actions(text):
         elif c in shut_exit:
             if "goodnight" in c:
                 speak("Good Night sir")
-                exit()
+                exit(0)
             elif "exit" in c:
                 speak("ok sir")
-                exit()
+                exit(0)
             elif "shutdown" in c:
                 speak("Closing ALL program!!!")
                 time.sleep(3)
                 speak("Shutting Down system!!!")
                 os.system("rundll32.exe powrprof.dll, SetSuspendState 0,1,0")
-                exit()
+                exit(0)
 
         elif "game" in c:
             speak(
@@ -295,17 +290,19 @@ def actions(text):
             return
 
         count += 1
-    speak("Sorry , i DIDNT GET THAT")
-    if flag == True:
+    speak("Sorry , I DIDNT GET THAT")
+    if flag is True:
         change_to_voice()
-    elif flag == False:
+    elif flag is False:
         change_text()
 
 
 # ABOUT
 def my_Self():
-    "This function is run from by ACTION function and it contain everything yoou might neeed\
-    to know about LAILA"
+    """
+    This function is run from by ACTION function and it contain everything you might need to know about LAILA
+    """
+
     speak("what do you want to know about me")
     text = get_command()
     date_of_birth = "12th of June 2020 "
