@@ -74,7 +74,6 @@ date_time = ["time", "date"]
 sched = ["schedule", "schedules", "scheduled"]
 
 quran = list(range(1, 115))
-print(quran)
 acc_sid = "AC221f4496a708695971f54efbf70d222c"
 
 acc_token = "35ed4d199954472a15d7627890778047"
