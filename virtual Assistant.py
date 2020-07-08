@@ -11,6 +11,7 @@ from random import choice
 from urllib.request import urlopen
 import goslate
 import playsound
+import pyautogui
 import pyttsx3
 import speech_recognition as sr
 import wikipedia
@@ -72,13 +73,13 @@ client = wolframalpha.Client(app_id=app_id)
 
 # we have our wolfram api key here
 
-def speak(text):
+def speak(_text):
     # This function returns everything drano wish to say
     engine = pyttsx3.init()
     engine.setProperty("rate", 150)
     engine.setProperty("volume", 0.9)
-    engine.say(text)
-    print(text)
+    engine.say(_text)
+    print(_text)
     engine.runAndWait()
 
 
@@ -87,10 +88,10 @@ def get_audio():
     try:
 
         # this function allows voice input command
-        r = sr.Recognizer()  # the regognizer class was initiated
+        r = sr.Recognizer()  # the recognizer class was initiated
         r.energy_threshold = 1200
         with sr.Microphone() as source:
-            print("listning.............")
+            print("listening.............")
 
             audio = r.listen(source)
 
@@ -102,11 +103,9 @@ def get_audio():
             said = r.recognize_google(audio)
             print(said)
 
-
-
         except sr.RequestError:
             speak('Do you want to switch to text input')
-            yes_no = input('YESS/NO: ')
+            yes_no = input('YES/NO: ')
             if yes_no.lower() == "yes":
                 speak("I am switching to text input")
                 var: bool = False
@@ -119,7 +118,7 @@ def get_audio():
                 return change_to_voice()
 
         return said.lower()
-    except:
+    finally:
         return get_audio()
 
 
@@ -137,25 +136,25 @@ def get_input():
 def my_Self():
     speak("what do you want to know about me")
     if flag:
-        text = get_audio()
+        _text = get_audio()
     elif not flag:
-        text = input("Enter your command: ")
+        _text = input("Enter your command: ")
     date_of_birth = "12th of June 2020 "
     response = """My name is  NOORA , a multipurpose virtual assistant bot 
                 created by Ahmad."""
-    if "features" in text or "feature" in text:
+    if "features" in _text or "feature" in _text:
         speak("My features include: ")
         for i in features:
             speak(i)
-    if "function" in text or "functions" in text:
+    if "function" in _text or "functions" in _text:
         speak("My functionalities include: ")
         for i in functionalities:
             speak(i)
-    if "online" in text:
+    if "online" in _text:
         speak("my online features are: ")
         for i in online_features:
             speak(i)
-    if "self" in text:
+    if "self" in _text:
         speak(response)
 
     speak(response)
@@ -173,7 +172,7 @@ def answer_questions(text):
                     try:
                         res = wikipedia.summary(" ".join(text_s[i + 2:]), sentences=3)
                         return speak(res)
-                    except:
+                    finally:
                         return speak("Sorry , I dont have any on " + " ".join(text_s[i + 2:]))
 
                 elif text_s[i] == "tell" and text_s[i + 2] == "about":
@@ -181,7 +180,7 @@ def answer_questions(text):
                     try:
                         res = wikipedia.summary(" ".join(text_s[text_s.index("about") + 1:]))
                         return speak(res)
-                    except:
+                    finally:
                         return speak("Sorry , I dont have any on " + " ".join(text_s[text_s.index("about") + 1:]))
 
     for c in wolphram_prompt:
@@ -200,11 +199,11 @@ def answer_questions(text):
     return speak("sory, I dont know")
 
 
-def note(text):
+def note(_text):
     # This allows me to note things down using notepad
     date = datetime.datetime.now()
     file_name = str(date).replace(":", "_")
-    var = text
+    var = _text
     if "write" in var:
         speak("what should i write")
     else:
@@ -212,7 +211,7 @@ def note(text):
 
     if flag:
         texts = get_audio()
-    elif flag == False:
+    elif flag is False:
         texts = input("what should i note: ")
 
     with open(file_name, "w") as file:
@@ -221,7 +220,7 @@ def note(text):
     return speak("written sir")
 
 
-def set_alarm(text):
+def set_alarm(_text):
     "This function set an alarm"
     try:
         global temp_time
@@ -230,7 +229,7 @@ def set_alarm(text):
 
         delta_init = dt.timedelta()  # a time delta was initiated, it allows us to add date/time
 
-        texts = text.split(" ")  # we split the input text
+        texts = _text.split(" ")  # we split the input text
 
         for i, c in enumerate(texts):
             if c in time_related:
@@ -320,22 +319,22 @@ def set_alarm(text):
             speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
             return time_f
 
-    except:
+    finally:
         speak("That's an invalid input")
-        if flag == False:
+        if not flag:
             change_text()
-        elif flag == True:
+        elif flag:
             change_to_voice()
 
 
 def ring_alarm():
     speak("what time do you want to set alarm to")
     if flag:
-        text = get_audio()
+        _text = get_audio()
     elif flag == False:
-        text = input("What time do you want to set alarm to: ")
+        _text = input("What time do you want to set alarm to: ")
     "This is where the alarm is rang oncee its time"
-    time_set = set_alarm(text)
+    time_set = set_alarm(_text)
     while dt.datetime.now() < time_set:
         time.sleep(1)
     speak("This is the time you set")
@@ -345,7 +344,7 @@ def in_calculator(text):
     speak("calculator activated")
 
     speak("what do u want to compute")
-    if flag == False:
+    if not flag:
         text_split = input("what do u want to compute: ").split(" ")
     elif flag:
         text_split = get_audio().split(' ')
@@ -426,7 +425,7 @@ def EditorMode():
 
     def select_all():
 
-        pyatutogui.hotkey('ctrl', 'a')
+        pyautogui.hotkey('ctrl', 'a')
         return
 
     def copy(self):
@@ -565,7 +564,7 @@ def get_news_head():
         speak("Sorry, Network is down now")
         if flag:
             change_to_voice()
-        if flag == False:
+        if not flag:
             change_text()
 
 
@@ -575,20 +574,20 @@ class Input:
         self.text_input = get_audio()
 
 
-def actions(text):
-    text_list = text.split(' ')
+def actions(_text):
+    text_list = _text.split(' ')
     for c in text_list:
         print(c)
-        if c in wikipedia_prompt or text in wikipedia_prompt:
-            return answer_questions(text)
+        if c in wikipedia_prompt or _text in wikipedia_prompt:
+            return answer_questions(_text)
 
-        elif c in note_str or text in note_str:
+        elif c in note_str or _text in note_str:
             return note(c)
-        elif c in calculator_command or text in calculator_command:
+        elif c in calculator_command or _text in calculator_command:
             return show_calculator()
-        elif c in in_calculator_prompt or text in in_calculator_prompt:
-            return in_calculator(text)
-        elif c in set_alarm_prompt or text in set_alarm_prompt:
+        elif c in in_calculator_prompt or _text in in_calculator_prompt:
+            return in_calculator(_text)
+        elif c in set_alarm_prompt or _text in set_alarm_prompt:
             thread_object = threading.Thread(target=ring_alarm)
 
             thread_object.start()
@@ -596,49 +595,49 @@ def actions(text):
             time.sleep(20)
 
             return change_text()
-        elif c in play_song_command or text in play_song_command:
+        elif c in play_song_command or _text in play_song_command:
             return get_mp3()
-        elif c in news_prompt or text in news_prompt:
+        elif c in news_prompt or _text in news_prompt:
             return get_news_head()
-        elif c in my_self_prompt or text in my_self_prompt:
+        elif c in my_self_prompt or _text in my_self_prompt:
             return my_Self()
-        elif c in virtual_key_prompt or text in virtual_key_prompt:
+        elif c in virtual_key_prompt or _text in virtual_key_prompt:
             pass
-        elif c in translator_prompt or text in translator_prompt:
+        elif c in translator_prompt or _text in translator_prompt:
             pass
-        elif c in editor_mode_prompt or text in translator_prompt:
+        elif c in editor_mode_prompt or _text in translator_prompt:
             pass
-        elif c in send_reminder or text in send_reminder:
+        elif c in send_reminder or _text in send_reminder:
             pass
 
     speak("didnt get")
-    if flag == True:
+    if flag:
         change_to_voice()
-    elif flag == False:
+    elif not flag:
         change_text()
 
 
-def wake_up(text):
+def wake_up(_text):
     # This function wakes her up
     try:
         wakeup_call = ["Nura", "noora", "Nora", "nora"]  # when he hears this (Her name), He wakes up
         greetings = ["Hello sir", "Hi Ahmad", "yes Doctor"]
 
-        for t in text.split(" "):
+        for t in _text.split(" "):
             if t in wakeup_call:
                 speak(choice(greetings))  # This gives randomness to the greeting
                 print(flag)
                 if flag == False:
-                    text = input("what do u want:")
-                    print(text)
-                    return text
+                    _text = input("what do u want:")
+                    print(_text)
+                    return _text
                 elif flag == True:
                     speak("How can i help you: ")
-                    text = get_audio()
-                    print(text)
-                    return text
+                    _text = get_audio()
+                    print(_text)
+                    return _text
         return
-    except:
+    finally:
         return
 
 
@@ -682,7 +681,7 @@ def change_text():
     print(text)
     if text is not None:
         while True:
-            while flag == False:
+            while not flag:
                 print(flag)
                 actions(text)
 
