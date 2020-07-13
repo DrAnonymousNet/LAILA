@@ -9,7 +9,7 @@ import time
 import urllib
 from random import choice
 from urllib.request import urlopen
-
+import sys
 import goslate
 import playsound
 import pyttsx3
@@ -22,13 +22,17 @@ from twilio.rest import Client
 from nooradb import *
 
 # in the block above, all needed library are installed
-global flag, text
-flag = False
+global flag, text , stop_thread
+flag = True
+stop_thread = False
+
 
 app_id = "86AT7X-523WTL6JVH"
 client = wolframalpha.Client(app_id=app_id)
 
-
+reminder_thread = 0
+alarm_thread = 0
+song_thread = 0
 # we have our wolfram api key here
 # HELPERS
 def speak(text):
@@ -75,7 +79,7 @@ def get_audio():
                 return change_to_voice()
 
         return said.lower()
-    finally:
+    except:
         return get_audio()
 
 
@@ -123,8 +127,7 @@ def change_to_voice():
 
 def change_text():
     "just like chang_to_voice handles the VOICE input, this handles the text input"
-    global flag
-    global text
+    global flag , text
 
     flag = False
     text = input("Enter your command: ")
@@ -142,36 +145,29 @@ def wake_up(_text):
     # This function receives a parameter from change_to_voice or change_text
     # depending on the value of flag and return the command given back to either of them
     # which is inturn executed by the action function
-    caller_name = os.environ['LOGNAME']
-    wakeup_call = ["laila", "elena", "leila", "leyla", "layla",
-                   "lila"]  # when he hears this (Her name), He wakes up
-    greetings = ["Hello {}".format(caller_name), "Hi {}".format(caller_name), "You called?"]
-    response = ["How can i help you", "What do u need sir"]
 
     for t in _text.lower().split(" "):
         if t in wakeup_call and len(_text.split(' ')) <= 2:
+            print(t)
             speak(choice(greetings))  # This gives randomness to the greeting
 
-            if flag is False:
+            speak(choice(response))
+            _text = get_command().lower()
 
-                speak(choice(response))
-                _text = input("what do u want:").lower()
+            return _text
 
-                return _text
-            elif flag is True:
-                speak(choice(response))
-                _text = get_audio().lower()
-
-                return _text
         elif t in wakeup_call and len(_text.split(" ")) > 2:
 
             return _text
     # If  no command was given or her name is not heard, the a none value will be returned back to either of the the that are mentioned
     # ABOVE
+    return returner()
+
+
+def returner():
     if flag:
         return change_to_voice()
-    elif flag is False:
-        return change_text()
+    return change_text()
 
 
 def actions(text):
@@ -179,7 +175,7 @@ def actions(text):
     # The command is executed
     # Some of the command in th database are either a single word or two or more words, so the checking is done
     # for single words or a group of words
-    global flag
+    global flag , reminder_thread ,alarm_thread , song_thread
 
     text_list = text.split(' ')
     count = 0
@@ -198,10 +194,10 @@ def actions(text):
             return in_calculator(text)
         elif c in set_alarm_prompt or text in set_alarm_prompt:
             mess = text.split(" ")
-            thread_object = threading.Thread(target=ring_alarm, args=[mess])
-            thread_object.start()
+            alarm_thread = threading.Thread(target=ring_alarm, args=[mess])
+            alarm_thread.start()
 
-            time.sleep(20)
+            time.sleep(10)
 
             if flag:
                 return change_to_voice()
@@ -210,14 +206,12 @@ def actions(text):
 
         elif c in play_song_command or text in play_song_command:
 
-            thread_object = threading.Thread(target=get_mp3)
-            thread_object.start()
+            song_thread = threading.Thread(target=get_mp3)
+            song_thread.start()
 
             time.sleep(2)
-            if flag is True:
-                return change_to_voice()
+            returner()
 
-            return change_text()
         elif c in news_prompt or text in news_prompt:
             return get_news_head()
         elif c in my_self_prompt or text in my_self_prompt:
@@ -230,8 +224,9 @@ def actions(text):
             pass
         elif c in send_reminder or text in send_reminder:
             mess = text.split(" ")
-            thread_object = threading.Thread(target=whatsapp_reminder, args=[mess])
-            thread_object.start()
+            reminder_thread = threading.Thread(target=whatsapp_reminder, args=[mess])
+            reminder_thread.start()
+            stop_thread = True
             time.sleep(60)
             return
         elif c in sec_mode_act or text in sec_mode_act:
@@ -249,7 +244,7 @@ def actions(text):
         elif c == "love":
             speak("I Love you too , but no string attached")
             return
-        elif c == "time" or c in "today's":
+        elif c == "time" or c in "today's" or "date" in c:
             todays = dt.date.today()
             times = dt.datetime.now()
             if c == "time":
@@ -345,10 +340,7 @@ def get_news_head():
             speak(news.title.text)
     except urllib.error.URLError:
         speak("Sorry, Network is down now")
-        if flag:
-            change_to_voice()
-        if flag == False:
-            change_text()
+        returner()
 
 
 def answer_questions(text):
@@ -566,13 +558,11 @@ def set_alarm(text):
 
     except:
         speak("That's an invalid input")
-        if flag == False:
-            change_text()
-        elif flag == True:
-            change_to_voice()
+        returner()
 
 
 def ring_alarm(mess):
+    global reminder_thread
     mag = False
     for c in mess:
         if c in meridiem or c in time_related:
@@ -589,10 +579,11 @@ def ring_alarm(mess):
     while dt.datetime.now() < time_set:
         time.sleep(1)
     playsound.playsound("swinging.mp3")
-    return change_to_voice()
+    sys.exit()
 
 
 def whatsapp_reminder(mess):
+    global reminder_thread
     # This handles all form of whatsapp reminders
 
     client = Client(acc_sid, acc_token)  # The API initiated
@@ -626,6 +617,8 @@ def whatsapp_reminder(mess):
                            from_=from_whatsapp_number,
                            to=to_whatsapp_number)
     speak("message sent")
+    if stop_thread:
+        sys.exit()
 
 
 # ARITHMETIC FUNCTIONS
@@ -698,6 +691,8 @@ def in_calculator(text):
 
         speak(round(sums, 2))
         text = get_command()
+        if "quit" in text:
+            speak("ok sir")
 
 
 # MEDIA
@@ -714,6 +709,7 @@ def get_mp3():
         file = "C:\Music\\" + randomfile
 
         playsound.playsound(file, True)
+        sys.exit()
     except playsound.PlaysoundException:
         speak("An Mp3 was not generated")
 
@@ -724,6 +720,8 @@ def quran_player(text):
     for c in quran_file:
         quran_num = int(c[:3])
         if str(quran_num) in text:
+            print(c)  # I want to know the name of the surah played
+
             playsound.playsound(r"C:\Music\shuraim\\" + c)
 
 
@@ -837,9 +835,7 @@ def secretatry_mode():
                 check_in_office(c)
             elif c == "exit" or c == "quit":
                 speak("ok sir")
-                if flag:
-                    return change_to_voice()
-                return change_text()
+                returner()
 
 
 # SCHEDUKER MODE
@@ -1016,7 +1012,4 @@ if os.path.isfile(path):  # Checking if there is a file for todays schedule
     initialise()
     time.sleep(2)
 
-if flag:
-    change_to_voice()
-elif flag == False:
-    change_text()
+returner()
