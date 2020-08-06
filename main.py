@@ -4,44 +4,46 @@ import datetime as dt
 import os
 import random
 import subprocess
+import sys
 import threading
 import time
 import urllib
 from random import choice
+from typing import Any, Union
 from urllib.request import urlopen
-import sys
+
 import goslate
 import playsound
 import pyttsx3
 import speech_recognition as sr
 import wikipedia
 import wolframalpha
-from bs4 import BeautifulSoup as soup
+from bs4 import BeautifulSoup as Soup
 from twilio.rest import Client
 
 from nooradb import *
 
 # in the block above, all needed library are installed
-global flag, text , stop_thread
-flag = True
-stop_thread = False
 
+flag = False
+stop_thread = False
 
 app_id = "86AT7X-523WTL6JVH"
 client = wolframalpha.Client(app_id=app_id)
 
 reminder_thread = 0
 alarm_thread = 0
-song_thread = 0
+
+
 # we have our wolfram api key here
 # HELPERS
-def speak(text):
+def speak(_text):
     # This function returns everything drano wish to say
     engine = pyttsx3.init()
     engine.setProperty("rate", 150)
     engine.setProperty("volume", 0.9)
-    engine.say(text)
-    print(text)
+    engine.say(_text)
+    print(_text)
     engine.runAndWait()
 
 
@@ -72,7 +74,7 @@ def get_audio():
                 flag = False
                 print(flag)
                 return change_text()
-            # SO , If you insisted on leavinng it at voice input, Flag
+            # SO , If you insisted on leaving it at voice input, Flag
             # will remain at true and change_to_voice will be returned
             if yes_no.lower() == "no":
                 flag = True
@@ -83,16 +85,16 @@ def get_audio():
         return get_audio()
 
 
-def get_command():
+def get_command() -> str:
     if flag:
         return get_audio().lower()
-    elif flag == False:
+    elif not flag:
         text = input("Input:  ").lower()
         return text
 
 
 def get_input():
-    "This function handles all form of text input"
+    """This function handles all form of _text input"""
     global flag
     said = input("Enter your command: ")
     said = said.lower()
@@ -109,25 +111,25 @@ def get_input():
 def change_to_voice():
     """This function runs if we are in voice input and handles all command related to
     voice input"""
-    global text
+
     global flag
     while True:
-        text = get_audio()  # We listen to a command here, and its stored in text variable
+        _text: Union[str, Any] = get_audio()  # We listen to a command here, and its stored in _text variable
 
-        text = wake_up(text)  # Text is passed into the wake up call, which chelk iff the wake up call is heard
-        # and when the wakeup call is heard, it awiat your command. and the command given is
-        # returned and pass into text variable
-        if text is not None:  # This will only run if the value returned tot the text variable is not none
+        _text = wake_up(_text)  # Text is passed into the wake up call, which check iff the wake up call is heard
+        # and when the wakeup call is heard, it await your command. and the command given is
+        # returned and pass into _text variable
+        if _text is not None:  # This will only run if the value returned tot the _text variable is not none
             while True:
                 while flag is True:
-                    actions(text)  # The Action function execute the command given
+                    actions(_text)  # The Action function execute the command given
 
                     return change_to_voice()  # This will forever returned so far flag is true
 
 
 def change_text():
-    "just like chang_to_voice handles the VOICE input, this handles the text input"
-    global flag , text
+    """just like chang_to_voice handles the VOICE input, this handles the _text input"""
+    global flag
 
     flag = False
     text = input("Enter your command: ")
@@ -144,7 +146,7 @@ def wake_up(_text):
     global flag
     # This function receives a parameter from change_to_voice or change_text
     # depending on the value of flag and return the command given back to either of them
-    # which is inturn executed by the action function
+    # which is in turn executed by the action function
 
     for t in _text.lower().split(" "):
         if t in wakeup_call and len(_text.split(' ')) <= 2:
@@ -153,14 +155,16 @@ def wake_up(_text):
 
             speak(choice(response))
             _text = get_command().lower()
+            print(_text)
 
             return _text
 
         elif t in wakeup_call and len(_text.split(" ")) > 2:
+            print(_text)
 
             return _text
-    # If  no command was given or her name is not heard, the a none value will be returned back to either of the the that are mentioned
-    # ABOVE
+    # If  no command was given or her name is not heard, the a none value will be returned back to either of the the
+    # that are mentioned ABOVE
     return returner()
 
 
@@ -170,69 +174,74 @@ def returner():
     return change_text()
 
 
-def actions(text):
-    # Here in the ation functions, All the checkings are done , and if there is a command that is recognized,
+def actions(_text):
+    """
+
+    :type _text: String
+    """
+    # Here in the action functions, All the checkings are done , and if there is a command that is recognized,
     # The command is executed
     # Some of the command in th database are either a single word or two or more words, so the checking is done
     # for single words or a group of words
-    global flag , reminder_thread ,alarm_thread , song_thread
+    global flag, reminder_thread, alarm_thread
 
-    text_list = text.split(' ')
+    text_list = _text.split(' ')
     count = 0
     for c in text_list:
-        if c in wikipedia_prompt or text in wikipedia_prompt:  # and "yourself" not in text:
+        if (c in wikipedia_prompt or _text in wikipedia_prompt) and "yourself" not in _text:
             print("ok")
-            return answer_questions(text)
-        elif c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt:
-            return answer_questions(text)
+            return answer_questions(_text)
+        elif (c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt) and "yourself" not in _text:
+            return answer_questions(_text)
 
-        elif c in note_str or text in note_str:
+        elif c in note_str or _text in note_str:
             return note(c)
-        elif c in calculator_command or text in calculator_command:
+        elif c in calculator_command or _text in calculator_command:
             return show_calculator()
-        elif text in in_calculator_prompt:
-            return in_calculator(text)
-        elif c in set_alarm_prompt or text in set_alarm_prompt:
-            mess = text.split(" ")
+        elif _text in in_calculator_prompt:
+            return in_calculator(_text)
+        elif c in set_alarm_prompt or _text in set_alarm_prompt:
+            print(c)
+            print(_text)
+            mess = _text.split(" ")
             alarm_thread = threading.Thread(target=ring_alarm, args=[mess])
             alarm_thread.start()
 
-            time.sleep(10)
+            time.sleep(7)
 
             if flag:
                 return change_to_voice()
 
             return change_text()
 
-        elif c in play_song_command or text in play_song_command:
+        elif c in play_song_command or _text in play_song_command:
 
             song_thread = threading.Thread(target=get_mp3)
             song_thread.start()
 
-            time.sleep(2)
+            time.sleep(5)
             returner()
 
-        elif c in news_prompt or text in news_prompt:
+        elif c in news_prompt or _text in news_prompt:
             return get_news_head()
-        elif c in my_self_prompt or text in my_self_prompt:
-            return my_Self()
-        elif c in virtual_key_prompt or text in virtual_key_prompt:
+        elif c in my_self_prompt or _text in my_self_prompt:
+            return my_self()
+        elif c in virtual_key_prompt or _text in virtual_key_prompt:
             pass
-        elif c in translator_prompt or text in translator_prompt:
+        elif c in translator_prompt or _text in translator_prompt:
             return translators()
-        elif c in editor_mode_prompt or text in translator_prompt:
+        elif c in editor_mode_prompt or _text in translator_prompt:
             pass
-        elif c in send_reminder or text in send_reminder:
-            mess = text.split(" ")
+        elif c in send_reminder or _text in send_reminder:
+            mess = _text.split(" ")
             reminder_thread = threading.Thread(target=whatsapp_reminder, args=[mess])
             reminder_thread.start()
-            stop_thread = True
             time.sleep(60)
             return
-        elif c in sec_mode_act or text in sec_mode_act:
+        elif c in sec_mode_act or _text in sec_mode_act:
             return secretatry_mode()
         elif c in sched:
-            return scheduler(text)
+            return scheduler(_text)
         elif c in text_:
             flag = False
             speak("text input activated")
@@ -241,17 +250,15 @@ def actions(text):
             flag = True
             speak("voice input activated")
             return change_to_voice()
-        elif c == "love":
-            speak("I Love you too , but no string attached")
-            return
+
         elif c == "time" or c in "today's" or "date" in c:
-            todays = dt.date.today()
+            _today = dt.date.today()
             times = dt.datetime.now()
             if c == "time":
                 speak("The time is " + times.strftime("%I:%M  %p "))
                 return
             elif c == "today's":
-                speak("Today is  " + todays.strftime(" %A ,%d of %B  %Y"))
+                speak("Today is  " + _today.strftime(" %A ,%d of %B  %Y"))
                 return
         elif c in shut_exit:
             if "goodnight" in c:
@@ -259,12 +266,12 @@ def actions(text):
                 exit(0)
             elif "exit" in c:
                 speak("ok sir")
-                exit(0)
+                exit(-1)
             elif "shutdown" in c:
                 speak("Closing ALL program!!!")
                 time.sleep(3)
                 speak("Shutting Down system!!!")
-                os.system("rundll32.exe powrprof.dll, SetSuspendState 0,1,0")
+                os.system('rundll32.exe powrprof.dll, SetSuspendState 0,1,0')
                 exit(0)
 
         elif "game" in c:
@@ -274,14 +281,14 @@ def actions(text):
             speak("Guess right the number before ur chances runs out")
 
             speak("THE levels available are: ")
-            for c in LEVEL:
-                speak(c)
+            for j in LEVEL:
+                speak(j)
             time.sleep(1)
             choose_level = levelchoose()
             game_choice(choose_level)
             return
         elif "quran" in c:
-            quran_player(text)
+            quran_player(_text)
             return
 
         count += 1
@@ -293,7 +300,7 @@ def actions(text):
 
 
 # ABOUT
-def my_Self():
+def my_self():
     """
     This function is run from by ACTION function and it contain everything you might need to know about LAILA
     """
@@ -301,14 +308,14 @@ def my_Self():
     speak("what do you want to know about me")
     text = get_command()
     date_of_birth = "12th of June 2020 "
-    response = """My name is  LAILA , a multipurpose virtual assistant bot 
-                created by Ahmad."""
+    _response = """My name is  LAILA , a multipurpose virtual assistant bot 
+                created by Ahmad"""
     if "features" in text or "feature" in text:
         speak("My features include: ")
         for i in features:
             speak(i)
     if "function" in text or "functions" in text:
-        speak("My functionalities include: ")
+        speak("My functionality include: ")
         for i in functionalities:
             speak(i)
     if "online" in text:
@@ -316,12 +323,13 @@ def my_Self():
         for i in online_features:
             speak(i)
     if "self" in text:
-        speak(response)
+        speak(_response)
 
-    speak(response)
+    speak(_response)
 
 
-# ONLINE FUNCTIONS (Everything under this contain all functions that requires internet connection before they are exccuted)
+# ONLINE FUNCTIONS (Everything under this contain all functions that requires internet connection before they are
+# exccuted)
 
 def get_news_head():
     "This function gives the NEWS HEADLINE taken from GOOGLE NEWS"
@@ -329,11 +337,11 @@ def get_news_head():
     try:
 
         news_url = "https://news.google.com/news/rss"
-        Client = urlopen(news_url)
-        xml_page = Client.read()
-        Client.close()
+        _client = urlopen(news_url)
+        xml_page = _client.read()
+        _client.close()
 
-        soup_page = soup(xml_page, "xml")
+        soup_page = Soup(xml_page, "xml")
         news_list = soup_page.findAll("item")
         # Print news title, url and publish date
         for news in news_list:
@@ -343,11 +351,11 @@ def get_news_head():
         returner()
 
 
-def answer_questions(text):
+def answer_questions(_text):
     # This is well she does most his question answering
-    text_s = text.lower().split(" ")
+    text_s = _text.lower().split(" ")
     for c in wikipedia_prompt:
-        if c in text:
+        if c in _text:
             for i in range(len(text_s)):
                 if text_s[i] == "who" and text_s[i + 1] == "is":
                     try:
@@ -363,16 +371,16 @@ def answer_questions(text):
                         return speak("Sorry , I dont have anything on " + " ".join(text_s[text_s.index("about") + 1:]))
     try:
         for c in wolphram_prompt:
-            if c in text:
+            if c in _text:
                 for i in range(len(text_s)):
-                    if (text_s[i] == "what" and text_s[i + 1] == "is") and "time" not in text:
+                    if (text_s[i] == "what" and text_s[i + 1] == "is") and "time" not in _text:
                         res = client.query(" ".join(text_s[text_s.index(" "):]))
                         return speak(next(res.results).text)
                     elif text_s[i] == "define":
-                        res = client.query(text)
+                        res = client.query(_text)
                         return speak(next(res.results).text)
                     else:
-                        res = client.query(text)
+                        res = client.query(_text)
                         return speak(next(res.results).text)
     except:
         try:
@@ -436,7 +444,7 @@ def set_alarm(text):
 
         delta_init = dt.timedelta()  # a time delta was initiated, it allows us to add date/time
 
-        texts = text.split(" ")  # we split the input text
+        texts = text.split(" ")  # we split the input _text
 
         for i, c in enumerate(texts):
             if c in time_related:
@@ -502,7 +510,7 @@ def set_alarm(text):
                     delta_init += dt.timedelta(days=1)
 
             if c in meridiem:  # for cases of p.m. and q.m.
-                if c == 'p.m.' and ('tomorrow' not in texts or 'today' in texts):  # if today was in text o left out
+                if c == 'p.m.' and ('tomorrow' not in texts or 'today' in texts):  # if today was in _text o left out
                     t = texts[i - 1]
                     if ":" in t:
                         t = t.split(":")
@@ -555,7 +563,6 @@ def set_alarm(text):
                 speak("reminder set to " + time_f.strftime("%I:%M  %p "))
                 return time_f
             return time_f
-
     except:
         speak("That's an invalid input")
         returner()
@@ -571,7 +578,7 @@ def ring_alarm(mess):
     if mag:
         mess = " ".join(mess)
         time_set = set_alarm(mess)
-    elif mag == False:
+    elif not mag:
         speak("what time do you want to set alarm to")
         text = get_command()
         "This is where the alarm is rang oncee its time"
@@ -594,11 +601,9 @@ def whatsapp_reminder(mess):
             mag = True
             break
 
-    if mag == False:
+    if not mag:
         mess = " ".join(mess)
-
-
-    elif mag == True:  # If it is accessed through set reminder keyword
+    elif mag:  # If it is accessed through set reminder keyword
         speak("what time do you want to set the reminder to")
         text = get_command()
         time_set = set_alarm("reminder " + text)
@@ -618,7 +623,7 @@ def whatsapp_reminder(mess):
                            to=to_whatsapp_number)
     speak("message sent")
     if stop_thread:
-        sys.exit()
+        sys.exit(0)
 
 
 # ARITHMETIC FUNCTIONS
@@ -764,9 +769,8 @@ def initialise():
                 # time.sleep(5)
 
 
-# SECRETARY MODE
-# in this mode , LAILA can act as a secrtary by checking if u are n office or not base on what u set, if u are in office , she does the necessary
-# thing aswell if u are not
+# SECRETARY MODE in this mode , LAILA can act as a secrtary by checking if u are n office or not base on what u set,
+# if u are in office , she does the necessary thing aswell if u are not
 in_office = "yes"
 
 
@@ -787,7 +791,7 @@ def in_office_set(text):
 
 
 def check_in_office(text):
-    # You ccan check mode u are in
+    # You can check mode u are in
     speak("in office mode is set to " + in_office)
     return
 
@@ -838,28 +842,30 @@ def secretatry_mode():
                 returner()
 
 
-# SCHEDUKER MODE
+# SCHEDUlER MODE
 todays = datetime.date.today()  # A new file is created each day
 file_name = str(todays).replace(":", "_") + ".txt"
 path = fr"C:\Users\USER\PycharmProjects\LAILA\Schedules\{file_name}"
 
 
-def makie_schedules():  # This function makes the schedules
+def make_schedules():  # This function makes the schedules
     speak("ok, what should i add")
     lisd = []
     tag = True
     while tag:
-        sch_list = get_command()
+        sch_list = get_command()  # Get all form of imput based on the value of flag
         if "all" in sch_list:  # Quiting condition
             speak("Ok sir")
             break
-        if "p.m." in sch_list or "a.m." in sch_list:
+        if "p.m." in sch_list or "a.m." in sch_list:  # if time in the schedule, a thread is created and she send me
+            # notification for the schedule
+
             thread_obj = threading.Thread(target=text_me, args=[sch_list])
             thread_obj.start()
         speak("ok, next")
         lisd.append(sch_list)
 
-    with open(path, "a") as file:
+    with open(path, "a") as file:  # all the schedules are written into schedule file
         for c in lisd:
             file.write(c + "\n")
 
@@ -870,7 +876,7 @@ def scheduler(command):  # This function gets my schedules and read my schedules
     available = os.path.isfile(path)  # Checking if there is a file for todays schedule
     # get_command =input("want to do: ").lower()
     if "add" in command or "make" in command:  # command check to make schedules
-        makie_schedules()
+        make_schedules()
     elif "check" in command or "do" in command:  # command to check if i have schedules
 
         if available == False and "do" in command:
@@ -878,7 +884,7 @@ def scheduler(command):  # This function gets my schedules and read my schedules
 
             des = get_command().lower()
             if des.lower() == "yes":
-                makie_schedules()
+                make_schedules()
             else:
                 speak("ok sir")
 
@@ -897,11 +903,11 @@ def scheduler(command):  # This function gets my schedules and read my schedules
                 speak("ok sir")
 
         elif "check" in command or "what" in command:
-            if available == False:
+            if not available:
                 speak("You dont have a schedule sir, Do you want to make schedule")
                 des = get_command.lower()
                 if des == "yes":
-                    makie_schedules()
+                    make_schedules()
                 else:
                     speak("ok sir")
             elif available:
@@ -911,12 +917,12 @@ def scheduler(command):  # This function gets my schedules and read my schedules
 
 
         elif "what" in command:
-            if available == False:
+            if not available:
 
                 speak("you dont have any schedule for today, do you want to add")
                 des = get_command.lower()
                 if des == "yes":
-                    makie_schedules()
+                    make_schedules()
                 else:
                     speak("ok sir")
 
