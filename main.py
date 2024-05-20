@@ -58,7 +58,7 @@ genai.configure(api_key=gemini_api_key)
 flag = False
 stop_thread = False
 
-app_id = "86AT7X-523WTL6JVH"
+app_id = ""
 client = wolframalpha.Client(app_id=app_id)
 
 reminder_thread = 0
