@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 lang_dict = {'Afar': 'aa', 'Abkhazian': 'ab', 'Afrikaans': 'af', 'Amharic': 'am', 'Arabic': 'ar',
              'Assamese': 'as', 'Aymara': 'ay', 'Azerbaijani': 'az', 'Bashkir': 'ba', 'Byelorussian': 'be',
@@ -27,11 +30,12 @@ lang_dict = {'Afar': 'aa', 'Abkhazian': 'ab', 'Afrikaans': 'af', 'Amharic': 'am'
 time_related = ['days', 'hours', 'minutes', 'seconds', 'minute', 'hour']
 watch_out = ['tomorrow', 'today']
 week_days = ['sundays', 'mondays', 'tuesday', 'wednesday', 'friday', 'saturday']
-meridiem = ['a.m.', 'p.m.']
+meridiem = ['a.m.', 'p.m.', 'am', 'pm']
 set_alarm_prompt = ["alarm"]
 send_reminder =["reminder"]
 voice_ = ["voice"]
 text_ = ["text"]
+away_messages_command =  ["messages", "message", "away message"]
 # Note making keyword
 note_str = ["note", "make a note", "write this down", "take this down"]
 
@@ -50,7 +54,7 @@ virtual_key_prompt = ["virtual", "keyboard"]
 translator_prompt = ["translate"]
 editor_mode_prompt = ["editor"]
 shut_exit = ["shutdown" , "exit" , "goodnight"]
-
+natural_language = ["natural language"]
 #About NOORA
 my_self_prompt = ["features" , "yourself"]
 functionalities = ["Calculator functions", "setting reminders", "setting alarm", "playing song", "virtual keyboard", "translator function", "note makeingh", "wiki search" , "mathematical computations", "getting news"]
@@ -69,10 +73,11 @@ date_time = ["time" , "date"]
 sched = ["schedule" , "schedules", "scheduled"]
 
 quran = list(range(1 , 115))
-acc_sid = "AC221f4496a708695971f54efbf70d222c"
 
-acc_token = "35ed4d199954472a15d7627890778047"
 
+acc_sid =  os.getenv('TWILIO_ACC_SID')
+acc_token = os.getenv('TWILIO_ACC_TOKEN')
+twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
 HANGMAN = ['''
          +---+
          |   |

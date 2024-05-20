@@ -1,5 +1,7 @@
 # This is a virtual assistant bot written by Dr.Anonymous
 import datetime
+from dotenv import load_dotenv
+
 import datetime as dt
 import os
 import random
@@ -11,19 +13,47 @@ import urllib
 from random import choice
 from typing import Any, Union
 from urllib.request import urlopen
-
+from dateutil import parser
+from pynput import keyboard
 import goslate
 import playsound
 import pyttsx3
 import speech_recognition as sr
+import google.generativeai as genai
+
 import wikipedia
 import wolframalpha
 from bs4 import BeautifulSoup as Soup
 from twilio.rest import Client
+from openai import OpenAI
 
 from nooradb import *
+load_dotenv()
 
-# in the block above, all needed library are installed
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=gemini_api_key)
+
+# my_assistants = open_ai_client.beta.assistants.list(
+#     order="desc",
+#     limit="20",
+# )
+# if my_assistants.data == []:
+#     my_assistant = open_ai_client.beta.assistants.create(
+#         instructions="You are a virtual assistant. Assist users with various tasks, answer questions, and provide helpful information.",
+#         name="laila",
+#         tools=[{"type": "code_interpreter"}],
+#         model="gpt-3.5-turbo",
+#     )
+#     assistant_id = my_assistant.id
+
+# else:
+#     __import__("ipdb").set_trace()
+#     assistant_id = my_assistants.data[0].id
+
+
+# empty_thread = open_ai_client.beta.threads.create()
+# thread_id = empty_thread.id
+# # in the block above, all needed library are installed
 
 flag = False
 stop_thread = False
@@ -33,18 +63,78 @@ client = wolframalpha.Client(app_id=app_id)
 
 reminder_thread = 0
 alarm_thread = 0
-
+interrupted = False
 
 # we have our wolfram api key here
 # HELPERS
 def speak(_text):
+    global interrupted
     # This function returns everything drano wish to say
     engine = pyttsx3.init()
     engine.setProperty("rate", 150)
     engine.setProperty("volume", 0.9)
+    voices = engine.getProperty('voices')
+
+    engine.setProperty('voice', 'com.apple.speech.synthesis.voice.samantha')
+    def on_word(name, location, length):
+        if interrupted:
+            engine.stop()
+
+    engine.connect('started-word', on_word)
     engine.say(_text)
     print(_text)
-    engine.runAndWait()
+    try:
+        engine.runAndWait()
+    except RuntimeError as e:
+        if engine._inLoop:
+            engine.endLoop()
+
+            
+def interrupt_speak():
+    global interrupted
+
+    def on_press(key):
+        global interrupted
+        try:
+            if key == keyboard.Key.esc:
+                interrupted = True
+                print("\n[Interrupt signal received]")
+                return False  # Stop listener
+        except AttributeError:
+            pass
+
+    # Collect events until released
+    with keyboard.Listener(on_press=on_press) as listener:
+        listener.join()
+
+def chat_with_gpt():
+    threading.Thread(target=interrupt_speak, daemon=True).start()
+
+    speak("natural language activated")
+    prompt = get_input()
+    model = genai.GenerativeModel('gemini-pro')
+    chat = model.start_chat(history=[])
+    while "exit" not in prompt:
+        try:
+            response = chat.send_message(prompt)
+            speak(response.text)
+
+        except ValueError:
+            continue
+        prompt = get_input()
+
+    if 'exit' in prompt:
+        speak("Natural language deactivated")
+
+
+
+def list_voices():
+    engine = pyttsx3.init()
+    voices = engine.getProperty('voices')
+    for index, voice in enumerate(voices):
+        print(f"Voice {index}: {voice.name}, Gender: {voice.gender}, ID: {voice.id}")
+
+list_voices()
 
 
 def get_audio():
@@ -81,7 +171,7 @@ def get_audio():
                 return change_to_voice()
 
         return said.lower()
-    except:
+    except Exception as e:
         return get_audio()
 
 
@@ -191,11 +281,15 @@ def actions(_text):
         if (c in wikipedia_prompt or _text in wikipedia_prompt) and "yourself" not in _text:
             print("ok")
             return answer_questions(_text)
+        
+        elif natural_language[0] in _text:
+            return chat_with_gpt()
+
         elif (c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt) and "yourself" not in _text:
             return answer_questions(_text)
 
         elif c in note_str or _text in note_str:
-            return note(c)
+            return note()
         elif c in calculator_command or _text in calculator_command:
             return show_calculator()
         elif _text in in_calculator_prompt:
@@ -229,14 +323,14 @@ def actions(_text):
         elif c in virtual_key_prompt or _text in virtual_key_prompt:
             pass
         elif c in translator_prompt or _text in translator_prompt:
-            return translators()
+            return translators() #Working
         elif c in editor_mode_prompt or _text in translator_prompt:
             pass
         elif c in send_reminder or _text in send_reminder:
             mess = _text.split(" ")
-            reminder_thread = threading.Thread(target=whatsapp_reminder, args=[mess])
+            reminder_thread = threading.Thread(target=sms_reminder, args=[mess])
             reminder_thread.start()
-            time.sleep(60)
+            time.sleep(5)
             return
         elif c in sec_mode_act or _text in sec_mode_act:
             return secretatry_mode()
@@ -341,7 +435,7 @@ def get_news_head():
         xml_page = _client.read()
         _client.close()
 
-        soup_page = Soup(xml_page, "xml")
+        soup_page = Soup(xml_page, "lxml")
         news_list = soup_page.findAll("item")
         # Print news title, url and publish date
         for news in news_list:
@@ -411,31 +505,64 @@ def translators():
         speak("No Network")
 
 
-def note(text):
-    # This allows me to note things down using notepad
-    date = datetime.datetime.now()
-    file_name = str(date).replace(":", "_") + ".txt"
-    file_names = str(date).replace(":", "_") + ".txt"
 
-    var = text
-    path = fr"C:\Users\USER\PycharmProjects\LAILA\secretary\{file_name}"
-    if "write" in var or "yes" in text:
-        speak("what should i write")
+import os
+import datetime as dt
+
+def note(secretary=False):
+    # Ensure the secretary directory exists
+    if not os.path.exists('secretary'):
+        os.makedirs('secretary')
+    if not os.path.exists("note"):
+        os.makedirs("note")
+    
+    # Get current date and time
+    now = dt.datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+
+    # Define the filename and file path
+    if secretary:
+        directory = "secretary"
     else:
-        speak("what should i note")
+        directory = "note"
 
+    filename = f"{directory}/{date_str}.txt"
+    
+    # Ask the user what to note
+    speak("What should I note?")
     texts = get_command()
 
-    with open(path, "w") as file:
-        file.write(texts)
-    subprocess.Popen(["notepad.exe", path])
+    if secretary:
+        speak("From who ?")
+        from_who = get_command()
 
-    speak("written sir")
-    return texts
+    
+    # Write the message to the file
+    with open(filename, "a") as file:
+        if not secretary:
+            from_who = "yourself"
+        file.write(f"Time: {convert_to_human_readable_time(time_str)},\nMessage: {texts},\nSender: {from_who}\n\n")
+    
+    speak("Written, sir.")
+    return humanize_for_sms(texts, from_who)
 
+def humanize_for_sms(texts, from_who):
+    message = f"{texts} from {from_who}"
+    return message
+
+
+
+def convert_to_human_readable_time(time_str):
+    # Parse the time string into a datetime object
+    time_obj = parser.parse(time_str)
+    
+    # Convert the time to a human-readable format
+    human_readable_time = time_obj.strftime("%I:%M %p")
+    return human_readable_time
 
 # TIME RELATED FUNCTIONS
-def set_alarm(text):
+def set_alarm(text:str):
     "This function set an alarm"
     try:
         global temp_time
@@ -572,7 +699,7 @@ def ring_alarm(mess):
     global reminder_thread
     mag = False
     for c in mess:
-        if c in meridiem or c in time_related:
+        if c.lower() in meridiem or c.lower() in time_related:
             mag = True
             break
     if mag:
@@ -585,11 +712,11 @@ def ring_alarm(mess):
         time_set = set_alarm("alarm " + text)
     while dt.datetime.now() < time_set:
         time.sleep(1)
-    playsound.playsound("swinging.mp3")
+    playsound.playsound("media/alarm.mp3")
     sys.exit()
 
 
-def whatsapp_reminder(mess):
+def sms_reminder(mess):
     global reminder_thread
     # This handles all form of whatsapp reminders
 
@@ -602,7 +729,8 @@ def whatsapp_reminder(mess):
             break
 
     if not mag:
-        mess = " ".join(mess)
+        if isinstance(mess, list):
+            mess = " ".join(mess)
     elif mag:  # If it is accessed through set reminder keyword
         speak("what time do you want to set the reminder to")
         text = get_command()
@@ -614,13 +742,13 @@ def whatsapp_reminder(mess):
             time.sleep(1)
     # if it was accessed by other functiong like the secratery mode, it send the reminder immediately
     # this ishe Twilio sandbox testing number
-    from_whatsapp_number = 'whatsapp:+14155238886'
+    from_number = twilio_phone_number
     # replace this number with your own WhatsApp Messaging number
-    to_whatsapp_number = 'whatsapp:+2348065007606'
+    to_number = '+2348065007606'
 
     client.messages.create(body=mess,
-                           from_=from_whatsapp_number,
-                           to=to_whatsapp_number)
+                           from_=from_number,
+                           to=to_number)
     speak("message sent")
     if stop_thread:
         sys.exit(0)
@@ -745,7 +873,7 @@ def text_me(message):
         while datetime.datetime.now() < event_time:
             time.sleep(1)
 
-        phone_num = "+12029335461"
+        phone_num = "+14127438749"
 
         client = Client(acc_sid, acc_token)
 
@@ -760,7 +888,7 @@ m = []
 
 
 def initialise():
-    with open(path, "r") as file:
+    with open(schedule_path, "r") as file:
 
         for c in file.readlines():
             if "p.m." in c or "a.m." in c:
@@ -804,8 +932,8 @@ def in_office_or_home(text):
         speak("Do you want to leave a note")
         decision = get_command()
         if "yes" in decision:
-            message_ = note(decision)
-            whatsapp_reminder(message_)
+            message_ = note(secretary=True)
+            #sms_reminder(message_)
         elif "no" in decision.lower():
             speak("ok sir")
 
@@ -815,13 +943,44 @@ def in_office_or_home(text):
         if "no" in decision.lower():
             return speak("ok sir")
         elif "yes" in decision:
-            message_ = note(decision)
-            whatsapp_reminder(message_)
+            message_ = note(secretary=True)
+            #sms_reminder(message_)
     return speak("thank you")
 
 
+
 def do_i_have_a_message():
-    pass
+    # Ensure the secretary directory exists
+    if not os.path.exists('secretary'):
+        speak("There are no messages")
+        return
+
+    # Check for unread messages
+    messages_exist = False
+    messages = []
+
+    for filename in os.listdir('secretary'):
+        if filename.endswith(".txt") and not filename.endswith("_read.txt"):
+            file_path = os.path.join('secretary', filename)
+            with open(file_path, "r") as file:
+                file_content = file.read()
+                if file_content.strip():  # Check if file is not empty
+                    messages_exist = True
+                    messages.append(f"Messages from {filename[:-4]}:\n{file_content}\n")
+
+            # Rename the file to mark it as read
+            new_filename = filename.replace(".txt", "_read.txt")
+            new_file_path = os.path.join('secretary', new_filename)
+            os.rename(file_path, new_file_path)
+
+    if messages_exist:
+        for message in messages:
+            print(message)  # Print messages to console
+            speak(message)  # Speak messages
+    else:
+        speak("There are no unread messages.")
+
+
 
 
 def secretatry_mode():
@@ -833,10 +992,16 @@ def secretatry_mode():
         for c in texts:
             if c in in_office_orhome:
                 in_office_or_home(text)
+                break
             elif c in set_office_home_mode:
                 in_office_set(text)
+                break
             elif c in check_in_office_mode:
                 check_in_office(c)
+                break
+            elif c in away_messages_command:
+                do_i_have_a_message()
+                break
             elif c == "exit" or c == "quit":
                 speak("ok sir")
                 returner()
@@ -844,8 +1009,8 @@ def secretatry_mode():
 
 # SCHEDUlER MODE
 todays = datetime.date.today()  # A new file is created each day
-file_name = str(todays).replace(":", "_") + ".txt"
-path = fr"C:\Users\USER\PycharmProjects\LAILA\Schedules\{file_name}"
+schedule_file_name = str(todays).replace(":", "_") + ".txt"
+schedule_path = fr"schedules\{schedule_file_name}"
 
 
 def make_schedules():  # This function makes the schedules
@@ -860,12 +1025,12 @@ def make_schedules():  # This function makes the schedules
         if "p.m." in sch_list or "a.m." in sch_list:  # if time in the schedule, a thread is created and she send me
             # notification for the schedule
 
-            thread_obj = threading.Thread(target=text_me, args=[sch_list])
+            thread_obj = threading.Thread(target=sms_reminder, args=[sch_list])
             thread_obj.start()
         speak("ok, next")
         lisd.append(sch_list)
 
-    with open(path, "a") as file:  # all the schedules are written into schedule file
+    with open(schedule_path, "a") as file:  # all the schedules are written into schedule file
         for c in lisd:
             file.write(c + "\n")
 
@@ -873,7 +1038,7 @@ def make_schedules():  # This function makes the schedules
 
 
 def scheduler(command):  # This function gets my schedules and read my schedules
-    available = os.path.isfile(path)  # Checking if there is a file for todays schedule
+    available = os.path.isfile(schedule_path)  # Checking if there is a file for todays schedule
     # get_command =input("want to do: ").lower()
     if "add" in command or "make" in command:  # command check to make schedules
         make_schedules()
@@ -894,9 +1059,9 @@ def scheduler(command):  # This function gets my schedules and read my schedules
             speak("should i read them ?")
             yes_no = get_command().lower()
             if yes_no == "yes":
-                speak("Here are your schdules for today")
-                with open(path, "r") as file:
-                    speak(file.read())
+                speak("Here are your schedules for today")
+                with open(schedule_path, "r") as file:
+                    speak(f"{file.read()},")
 
                 speak("that's all you have for now")
             elif yes_no == "no":
@@ -912,8 +1077,8 @@ def scheduler(command):  # This function gets my schedules and read my schedules
                     speak("ok sir")
             elif available:
                 speak("ok sir , here are your schedules for today")
-                with open(path, "r") as file:
-                    speak(file.read())
+                with open(schedule_path, "r") as file:
+                    speak(f"{file.read()},")
 
 
         elif "what" in command:
@@ -928,7 +1093,7 @@ def scheduler(command):  # This function gets my schedules and read my schedules
 
             elif available:
                 speak("your schedules for today are :")
-                with open(path, "r") as file:
+                with open(schedule_path, "r") as file:
                     speak(file.read())
 
 
@@ -1014,7 +1179,7 @@ def game_choice(choose_level):
         changes(500)
 
 
-if os.path.isfile(path):  # Checking if there is a file for todays schedule
+if os.path.isfile(schedule_path):  # Checking if there is a file for todays schedule
     initialise()
     time.sleep(2)
 
