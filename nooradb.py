@@ -42,7 +42,7 @@ note_str = ["note", "make a note", "write this down", "take this down"]
 # calculator keyword
 calculator_term = ['-', '+', '*', '/', 'plus', 'minus', 'multiply', 'divided', 'base']
 calculator_command = ["pop me a calculator",  "get me a calculator", "i need a calculator", "give me a calculator", "give me calculator"]
-in_calculator_prompt = ["activate calculator", "activate calculator mode"]
+in_calculator_prompt = ["activate calculator", "activate calculator mode", "calculator"]
 
 
 #General keys

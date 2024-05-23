@@ -26,6 +26,14 @@ import wolframalpha
 from bs4 import BeautifulSoup as Soup
 from twilio.rest import Client
 from openai import OpenAI
+import os
+import queue
+import sounddevice as sd
+import vosk
+import json
+import threading
+import tkinter as tk
+from tkinter import font
 
 from nooradb import *
 load_dotenv()
@@ -64,6 +72,95 @@ client = wolframalpha.Client(app_id=app_id)
 reminder_thread = 0
 alarm_thread = 0
 interrupted = False
+
+####TRANSCRIPTION
+
+def setup_and_activate_transcription_mode(model_path, samplerate=16000):
+    # Check if the Vosk model path exists
+    if not os.path.exists(model_path):
+        print(f"Please download the model from https://alphacephei.com/vosk/models and unpack as {model_path}")
+        exit(1)
+
+    # Initialize the Vosk model
+    model = vosk.Model(model_path)
+
+    # Create a queue to hold audio data
+    q = queue.Queue()
+
+    # List to store the last three complete texts
+    recent_texts = ["", "", ""]
+
+    # Callback function to receive audio data
+    def callback(indata, frames, time, status):
+        if status:
+            print(status, file=sys.stderr)
+        q.put(bytes(indata))
+
+    # Function to continuously listen and recognize speech
+    def listen_and_recognize():
+        with sd.RawInputStream(samplerate=samplerate, blocksize=8000, dtype='int16',
+                               channels=1, callback=callback):
+            rec = vosk.KaldiRecognizer(model, samplerate)
+            while True:
+                data = q.get()
+                if rec.AcceptWaveform(data):
+                    result = json.loads(rec.Result())
+                    add_final_text(result['text'])
+                else:
+                    partial_result = json.loads(rec.PartialResult())
+                    update_partial_text(partial_result['partial'])
+
+    # Function to add final recognized text
+    def add_final_text(text):
+        if text.strip():  # Add only if text is not empty
+            recent_texts.append(text)
+            if len(recent_texts) > 3:
+                recent_texts.pop(0)
+            update_text_widget()
+
+    # Function to update the partial recognized text
+    def update_partial_text(text):
+        if text.strip():  # Update only if text is not empty
+            update_text_widget(partial_text=text)
+
+    # Function to update the text widget
+    def update_text_widget(partial_text=""):
+        text_widget.config(state=tk.NORMAL)
+        text_widget.delete('1.0', tk.END)
+        for t in recent_texts:
+            text_widget.insert(tk.END, t + "\n")
+        text_widget.insert(tk.END, partial_text)
+        text_widget.tag_configure("center", justify='center')
+        text_widget.tag_add("center", "1.0", "end")
+        text_widget.config(state=tk.DISABLED)
+
+    # Setup Tkinter
+    root = tk.Tk()
+    root.title("LAILA Transcription")
+
+    # Make the window take up all available screen size
+    root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}")
+
+    # Define a larger font
+    large_font = font.Font(size=50)
+
+    # Create and configure the text widget
+    global text_widget
+    text_widget = tk.Text(root, state=tk.DISABLED, wrap='word', font=large_font)
+    text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Add a label that will always be visible
+    label = tk.Label(root, text="POWERED BY LAILA", font=large_font, fg="grey")
+    label.pack(side=tk.BOTTOM, pady=10)
+
+    # Start the recognition thread
+    recognition_thread = threading.Thread(target=listen_and_recognize, daemon=True)
+    recognition_thread.start()
+
+    # Start the Tkinter main loop
+    root.mainloop()
+model_path = "vosk-model-en-us-0.22"
+
 
 # we have our wolfram api key here
 # HELPERS
@@ -128,16 +225,16 @@ def chat_with_gpt():
 
 
 
-def list_voices():
-    engine = pyttsx3.init()
-    voices = engine.getProperty('voices')
-    for index, voice in enumerate(voices):
-        print(f"Voice {index}: {voice.name}, Gender: {voice.gender}, ID: {voice.id}")
+# def list_voices():
+#     engine = pyttsx3.init()
+#     voices = engine.getProperty('voices')
+#     for index, voice in enumerate(voices):
+#         print(f"Voice {index}: {voice.name}, Gender: {voice.gender}, ID: {voice.id}")
 
-list_voices()
+# list_voices()
 
 
-def get_audio():
+def get_audio(wake_up=True):
     global flag
     try:
         # this function allows voice input command
@@ -145,7 +242,7 @@ def get_audio():
         r.energy_threshold = 1200
         with sr.Microphone() as source:
             r.adjust_for_ambient_noise(source)
-            print("listening.............")
+            print("listening for command............." if not wake_up else "listening for wake up call")
 
             audio = r.listen(source)
 
@@ -177,7 +274,7 @@ def get_audio():
 
 def get_command() -> str:
     if flag:
-        return get_audio().lower()
+        return get_audio(wake_up=False).lower()
     elif not flag:
         text = input("Input:  ").lower()
         return text
@@ -194,7 +291,7 @@ def get_input():
         flag = True
         speak("I am switching to voice input")
 
-        get_audio()
+        get_audio(wake_up=True)
     return said
 
 
@@ -284,24 +381,29 @@ def actions(_text):
         
         elif natural_language[0] in _text:
             return chat_with_gpt()
+         
+        elif "transcription" in _text:
+            speak("Transciption mode activated")
+            setup_and_activate_transcription_mode(model_path)
+
 
         elif (c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt) and "yourself" not in _text:
             return answer_questions(_text)
 
         elif c in note_str or _text in note_str:
             return note()
-        elif c in calculator_command or _text in calculator_command:
-            return show_calculator()
-        elif _text in in_calculator_prompt:
+        # elif c in calculator_command or _text in calculator_command:
+        #     return show_calculator()
+        elif _text in in_calculator_prompt or c in in_calculator_prompt:
             return in_calculator(_text)
         elif c in set_alarm_prompt or _text in set_alarm_prompt:
             print(c)
             print(_text)
-            mess = _text.split(" ")
-            alarm_thread = threading.Thread(target=ring_alarm, args=[mess])
+            time_to_set_alarm_to =  get_alarm_time("alarm " + _text)
+            alarm_thread = threading.Thread(target=ring_alarm, args=[time_to_set_alarm_to])
             alarm_thread.start()
 
-            time.sleep(7)
+            time.sleep(3)
 
             if flag:
                 return change_to_voice()
@@ -438,7 +540,7 @@ def get_news_head():
         soup_page = Soup(xml_page, "lxml")
         news_list = soup_page.findAll("item")
         # Print news title, url and publish date
-        for news in news_list:
+        for news in news_list[:10]:
             speak(news.title.text)
     except urllib.error.URLError:
         speak("Sorry, Network is down now")
@@ -539,13 +641,25 @@ def note(secretary=False):
 
     
     # Write the message to the file
-    with open(filename, "a") as file:
-        if not secretary:
-            from_who = "yourself"
-        file.write(f"Time: {convert_to_human_readable_time(time_str)},\nMessage: {texts},\nSender: {from_who}\n\n")
-    
+    if secretary:
+        secretary_message(filename, time_str, texts, from_who)
+    else:
+        make_a_note(filename, texts, time_str)
+
     speak("Written, sir.")
     return humanize_for_sms(texts, from_who)
+
+def make_a_note(filename, texts, time_str):
+        # Write the message to the file
+    with open(filename, "a") as file:
+        file.write(f"Time: {convert_to_human_readable_time(time_str)},\nNote: {texts}\n\n")
+
+def secretary_message(filename, time_str, texts, from_who):
+    with open(filename, "a") as file:
+        file.write(f"Time: {convert_to_human_readable_time(time_str)},\nMessage: {texts},\nSender: {from_who}\n\n")
+    
+    
+
 
 def humanize_for_sms(texts, from_who):
     message = f"{texts} from {from_who}"
@@ -562,181 +676,287 @@ def convert_to_human_readable_time(time_str):
     return human_readable_time
 
 # TIME RELATED FUNCTIONS
-def set_alarm(text:str):
-    "This function set an alarm"
+
+def get_alarm_time(mess: str, silent=False):
+    "This function sets an alarm"
+    text = parse_alarm_command(mess)
     try:
-        global temp_time
-        alarm_time = None
-        recent_date = dt.datetime.now()  # this give the resent date time
-
-        delta_init = dt.timedelta()  # a time delta was initiated, it allows us to add date/time
-
-        texts = text.split(" ")  # we split the input _text
+        recent_date = dt.datetime.now()
+        delta_init = dt.timedelta()
+        texts = text.split(" ")
 
         for i, c in enumerate(texts):
             if c in time_related:
-                # This handles the reminder of the type [minutes ,hour, seconds]
-                if c.startswith('m'):
-
-                    delta_init += dt.timedelta(
-                        minutes=int(texts[i - 1]))  # Adding the minute specify to the empty time delta initiated
-                    time_f = delta_init + recent_date  # The minutes is added to the recent time
-                    if "reminder" in text:
-                        speak("reminder set to " + time_f.strftime("%I:%M  %p "))
-                        print("reminder set to " + time_f.strftime("%I:%M  %p "))
-                        return time_f
-                    elif "alarm" in text:
-                        speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
-                        print("Alarm set to " + time_f.strftime("%I:%M  %p "))
-                        return time_f
-                    else:
-                        return time_f
-
-                if c.startswith('h'):  # If the time set is hour
-                    delta_init += dt.timedelta(hours=int(texts[i - 1]))
-                    time_f = delta_init + recent_date  # does the same as minutes
-                    if "reminder" in text:
-                        speak("reminder set to " + time_f.strftime("%I:%M  %p "))
-                        print("reminder set to " + time_f.strftime("%I:%M  %p "))
-                        return time_f
-                    elif "alarm" in text:
-                        speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
-                        print("Alarm set to " + time_f.strftime("%I:%M  %p "))
-                        return time_f
-                    else:
-                        return time_f
+                unit = c[0]  # Get the first character to determine the unit
+                value = int(texts[i - 1])
+                if unit == 'm':
+                    delta_init += dt.timedelta(minutes=value)
+                elif unit == 'h':
+                    delta_init += dt.timedelta(hours=value)
+                time_f = delta_init + recent_date
+                if "reminder" in text:
+                    if not silent:
+                        speak("Reminder set to " + time_f.strftime("%I:%M %p"))
+                    return time_f
+                elif "alarm" in text:
+                    speak("Alarm set to " + time_f.strftime("%I:%M %p"))
+                    return time_f
 
             elif c in watch_out:
-                # if [today or tomorrow in time]
-                if c == 'tomorrow' and 'p.m.' in texts:  # If tomorrow
-
-                    t = texts[texts.index('p.m.') - 1]  # Accessing the time
-                    if ":" in t:  # If the time is the likes of 3:45 p.m.
-                        t = t.split(":")  # Splitting the hour and minutes
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
-                                                int(t[1]))
-                    elif len(t) == 1:  # If the time is the likes of 3 p.m.
-
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day,
-                                                int(t))  # The hour is stored in
-                    alarm_time = dt.timedelta(
-                        days=1) + temp_time  # Since tomorrrow was specify, we add 1 more day to the time
-
-                elif c == 'tomorrow' and 'a.m.' in texts:  # IF its a.m.
-                    t = texts[texts.index('a.m.') - 1]
-                    if ":" in t:
-                        t = t.split(":")
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
-                                                int(t[1]))
-                    elif len(t) == 1:
-                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
-                    alarm_time = dt.timedelta(days=1) + temp_time
-
-
-                elif c == 'tomorrow':
+                if c == 'tomorrow':
                     delta_init += dt.timedelta(days=1)
-
-            if c in meridiem:  # for cases of p.m. and q.m.
-                if c == 'p.m.' and ('tomorrow' not in texts or 'today' in texts):  # if today was in _text o left out
-                    t = texts[i - 1]
+                
+                meridian = 'p.m.' if 'p.m.' in texts or 'pm' in texts else 'a.m.' if 'a.m.' in texts or 'am' in texts else None
+                if meridian:
+                    t_index = texts.index(meridian) - 1
+                    t = texts[t_index]
                     if ":" in t:
                         t = t.split(":")
-                        if len(t[0]) == 1:
-                            t[0] = int(t[0]) + 12
+                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]), int(t[1]))
+                    else:
+                        temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
 
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
-                                                 int(t[1]))
-                        if alarm_time < dt.datetime.now():
-                            alarm_time += dt.timedelta(days=1)
-                    elif len(t) == 1 or len(t) == 2:
-                        if len(t) == 1:
-                            t = int(t) + 12
+                    if 'p.m.' in texts or 'pm' in texts:
+                        if int(t[0]) < 12:
+                            temp_time = temp_time.replace(hour=temp_time.hour + 12)
 
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
-                        if alarm_time < dt.datetime.now():
-                            alarm_time += dt.timedelta(days=1)
-                        print(alarm_time)
+                    alarm_time = temp_time + delta_init
+                    if alarm_time < dt.datetime.now():
+                        alarm_time += dt.timedelta(days=1)
 
-                elif c == 'a.m.' and ('tomorrow' not in texts or 'today' in texts):
-                    t = texts[i - 1]
+                    if "alarm" in text:
+                        speak("Alarm set to " + alarm_time.strftime("%H:%M %p %A, %d of %B %Y"))
+                        return alarm_time
+                    elif "reminder" in text:
+                        if not silent:
+                            speak("Reminder set to " + alarm_time.strftime("%H:%M %p %A, %d of %B %Y"))
+                        return alarm_time
 
-                    if ":" in t:
-                        t = t.split(":")
+            elif c in meridiem:
+                t = texts[i - 1]
+                if ":" in t:
+                    t = t.split(":")
+                    hour = int(t[0])
+                    minute = int(t[1])
+                else:
+                    hour = int(t)
+                    minute = 0
 
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
-                                                 int(t[1]))
+                if c in ['p.m.', 'pm'] and hour < 12:
+                    hour += 12
 
-                    elif len(t) == 1:
-                        alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
-                        print(alarm_time)
-        if alarm_time:
-            if "alarm" in text:
-                speak("Alarm set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
-                print("Alarm set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
-                return alarm_time
-            elif "reminder" in text:
-                speak("reminder set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
-                print("reminder set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
-                return alarm_time
-            else:
-                return alarm_time
+                alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, hour, minute)
+                if alarm_time < dt.datetime.now():
+                    alarm_time += dt.timedelta(days=1)
 
-        elif delta_init + recent_date != recent_date:
+                if "alarm" in text:
+                    speak("Alarm set to " + alarm_time.strftime("%H:%M %p %A, %d of %B %Y"))
+                    return alarm_time
+                elif "reminder" in text:
+                    if not silent:
+                        speak("Reminder set to " + alarm_time.strftime("%H:%M %p %A, %d of %B %Y"))
+                    return alarm_time
+
+        if delta_init.total_seconds() > 0:
             time_f = delta_init + recent_date
             if "alarm" in text:
-                speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
+                speak("Alarm set to " + time_f.strftime("%I:%M %p"))
                 return time_f
             elif "reminder" in text:
-                speak("reminder set to " + time_f.strftime("%I:%M  %p "))
+                if not silent:
+                    speak("Reminder set to " + time_f.strftime("%I:%M %p"))
                 return time_f
-            return time_f
-    except:
+
+    except Exception as e:
         speak("That's an invalid input")
         returner()
+# def get_alarm_time(mess:str):
+#     "This function set an alarm"
+#     text = parse_alarm_command(mess)
+#     try:
+#         temp_time = None
+#         alarm_time = None
+#         recent_date = dt.datetime.now()  # this give the resent date time
+
+#         delta_init = dt.timedelta()  # a time delta was initiated, it allows us to add date/time
+
+#         texts = text.split(" ")  # we split the input _text
+
+#         for i, c in enumerate(texts):
+#             if c in time_related:
+#                 # This handles the reminder of the type [minutes ,hour, seconds]
+#                 if c.startswith('m'):
+
+#                     delta_init += dt.timedelta(
+#                         minutes=int(texts[i - 1]))  # Adding the minute specify to the empty time delta initiated
+#                     time_f = delta_init + recent_date  # The minutes is added to the recent time
+#                     if "reminder" in text:
+#                         speak("reminder set to " + time_f.strftime("%I:%M  %p "))
+#                         print("reminder set to " + time_f.strftime("%I:%M  %p "))
+#                         return time_f
+#                     elif "alarm" in text:
+#                         speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
+#                         print("Alarm set to " + time_f.strftime("%I:%M  %p "))
+#                         return time_f
+#                     else:
+#                         return time_f
+
+#                 if c.startswith('h'):  # If the time set is hour
+#                     delta_init += dt.timedelta(hours=int(texts[i - 1]))
+#                     time_f = delta_init + recent_date  # does the same as minutes
+#                     if "reminder" in text:
+#                         speak("reminder set to " + time_f.strftime("%I:%M  %p "))
+#                         print("reminder set to " + time_f.strftime("%I:%M  %p "))
+#                         return time_f
+#                     elif "alarm" in text:
+#                         speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
+#                         print("Alarm set to " + time_f.strftime("%I:%M  %p "))
+#                         return time_f
+#                     else:
+#                         return time_f
+
+#             elif c in watch_out:
+#                 # if [today or tomorrow in time]
+#                 __import__("ipdb").set_trace()
+#                 if c == 'tomorrow' and 'p.m.' in texts or c == 'tomorrow' and 'pm' in texts:  # If tomorrow
+#                     if 'p.m.' in texts:
+#                         t = texts[texts.index('p.m.') - 1]  # Accessing the time
+#                     elif 'pm' in text:
+#                         t = texts[texts.index('pm') - 1]
+#                     if ":" in t:  # If the time is the likes of 3:45 p.m.
+#                         t = t.split(":")  # Splitting the hour and minutes
+#                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+#                                                 int(t[1]))
+#                     elif len(t) in [1,2]:  # If the time is the likes of 3 p.m.
+
+#                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day,
+#                                                 int(t))  # The hour is stored in
+#                     alarm_time = dt.timedelta(
+#                         days=1) + temp_time  # Since tomorrrow was specify, we add 1 more day to the time
+
+#                 elif c == 'tomorrow' and 'a.m.' in texts or c == "tomorrow" and 'am' in texts:  # IF its a.m.
+#                     t = texts[texts.index('a.m.') - 1]
+#                     if ":" in t:
+#                         t = t.split(":")
+#                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+#                                                 int(t[1]))
+#                     elif len(t) == 1:
+#                         temp_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
+#                     alarm_time = dt.timedelta(days=1) + temp_time
 
 
-def ring_alarm(mess):
+#                 elif c == 'tomorrow':
+#                     delta_init += dt.timedelta(days=1)
+
+#             if c in meridiem:  # for cases of p.m. and q.m.
+#                 if c in ['p.m.', 'pm'] and ('tomorrow' not in texts or 'today' in texts):  # if today was in _text o left out
+#                     t = texts[i - 1]
+#                     if ":" in t:
+#                         t = t.split(":")
+#                         if len(t[0]) == 1:
+#                             t[0] = int(t[0]) + 12
+
+#                         alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+#                                                  int(t[1]))
+#                         if alarm_time < dt.datetime.now():
+#                             alarm_time += dt.timedelta(days=1)
+#                     elif len(t) == 1 or len(t) == 2:
+#                         if len(t) == 1:
+#                             t = int(t) + 12
+
+#                         alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
+#                         if alarm_time < dt.datetime.now():
+#                             alarm_time += dt.timedelta(days=1)
+#                         print(alarm_time)
+
+#                 elif c in ['a.m.', 'am'] and ('tomorrow' not in texts or 'today' in texts):
+#                     t = texts[i - 1]
+
+#                     if ":" in t:
+#                         t = t.split(":")
+
+#                         alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t[0]),
+#                                                  int(t[1]))
+
+#                     elif len(t) == 1:
+#                         alarm_time = dt.datetime(recent_date.year, recent_date.month, recent_date.day, int(t))
+#                         print(alarm_time)
+#         if alarm_time:
+#             if "alarm" in text:
+#                 speak("Alarm set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
+#                 print("Alarm set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
+#                 return alarm_time
+#             elif "reminder" in text:
+#                 speak("reminder set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
+#                 print("reminder set to " + alarm_time.strftime("%H:%M  %p %A ,%d of %B  %Y"))
+#                 return alarm_time
+#             else:
+#                 return alarm_time
+
+#         elif delta_init + recent_date != recent_date:
+#             time_f = delta_init + recent_date
+#             if "alarm" in text:
+#                 speak("Alarm set to " + time_f.strftime("%I:%M  %p "))
+#                 return time_f
+#             elif "reminder" in text:
+#                 speak("reminder set to " + time_f.strftime("%I:%M  %p "))
+#                 return time_f
+#             return time_f
+#     except Exception as e:
+#         speak("That's an invalid input")
+#         returner()
+
+def parse_alarm_command(mess):
     global reminder_thread
     mag = False
+    mess = mess.split(" ")
     for c in mess:
         if c.lower() in meridiem or c.lower() in time_related:
             mag = True
             break
     if mag:
         mess = " ".join(mess)
-        time_set = set_alarm(mess)
-    elif not mag:
+        return mess
+    else:
         speak("what time do you want to set alarm to")
         text = get_command()
-        "This is where the alarm is rang oncee its time"
-        time_set = set_alarm("alarm " + text)
+        return text
+    
+
+        
+def ring_alarm(time_set):
     while dt.datetime.now() < time_set:
         time.sleep(1)
     playsound.playsound("media/alarm.mp3")
     sys.exit()
 
 
-def sms_reminder(mess):
+def sms_reminder(mess, secretary=False):
     global reminder_thread
     # This handles all form of whatsapp reminders
-
+    print("message:" ,mess)
+    if isinstance(mess, str):
+        mess = mess.split(" ")
     client = Client(acc_sid, acc_token)  # The API initiated
     mag = False  # This reminder is accessed by different functions and they all have different foemat
     # So there is need to specify which is which
     for c in mess:
         if c in meridiem or c in time_related:  # If c is accessed through set reminder keyword
             mag = True
+            time_set = get_alarm_time("reminder " + " ".join(mess), silent = True)
             break
 
-    if not mag:
+    if mag:
         if isinstance(mess, list):
             mess = " ".join(mess)
-    elif mag:  # If it is accessed through set reminder keyword
-        speak("what time do you want to set the reminder to")
-        text = get_command()
-        time_set = set_alarm("reminder " + text)
-        speak("what is the reminder message")
-        mess = get_command()
+    elif not mag:  # If it is accessed through set reminder keyword
+        if not secretary:
+            speak("what time do you want to set the reminder to")
+            text = get_command()
+            time_set = get_alarm_time("reminder " + text)
+            speak("what is the reminder message")
+            mess = get_command()
+        
     if mag:
         while dt.datetime.now() < time_set:
             time.sleep(1)
@@ -746,6 +966,8 @@ def sms_reminder(mess):
     # replace this number with your own WhatsApp Messaging number
     to_number = '+2348065007606'
 
+    if isinstance(mess, list):
+        mess = " ".join(mess)
     client.messages.create(body=mess,
                            from_=from_number,
                            to=to_number)
@@ -769,9 +991,8 @@ def in_calculator(text):
 
     text = get_command()
 
-    while "quit" not in text:
+    while "quit" not in text or "exit" not in text:
         text_split = text.split(" ")
-
         if "convert" not in text_split:
             sums = float(text_split[0])
         elif "convert" in text_split:
@@ -834,12 +1055,12 @@ def get_mp3():
     # The mp3 generator function
     try:
         while True:
-            randomfile = random.choice(os.listdir("C:\Music\\"))  # It randomly choose a file from my music folder
+            randomfile = random.choice(os.listdir("media/"))  # It randomly choose a file from my music folder
             if randomfile[-3:] == "mp3":
                 break
 
         print(randomfile)
-        file = "C:\Music\\" + randomfile
+        file = "media/" + randomfile
 
         playsound.playsound(file, True)
         sys.exit()
@@ -866,7 +1087,8 @@ def quran_player(text):
 # Your Account Sid and Auth Token from twilio.com/console
 # THIS FUNCTION HA NOT BEEN INITIATED IN ANY FUNCTION
 def text_me(message):
-    event_time = set_alarm(message)
+    print(message)
+    event_time = get_alarm_time(message)
 
     if datetime.datetime.now() < event_time:
 
@@ -891,15 +1113,17 @@ def initialise():
     with open(schedule_path, "r") as file:
 
         for c in file.readlines():
+            print(c)
             if "p.m." in c or "a.m." in c:
-                thread_obj = threading.Thread(target=text_me, args=[c.strip()])
+
+                thread_obj = threading.Thread(target=sms_reminder, args=["reminder " +c.strip()])
                 thread_obj.start()
                 # time.sleep(5)
 
 
 # SECRETARY MODE in this mode , LAILA can act as a secrtary by checking if u are n office or not base on what u set,
 # if u are in office , she does the necessary thing aswell if u are not
-in_office = "yes"
+in_office = "available"
 
 
 # Administrative Functions
@@ -908,32 +1132,32 @@ def in_office_set(text):
 
     global in_office
     if "no" in text:
-        in_office = "No"
+        in_office = "unavailable"
     elif "yes" in text:
-        in_office = "yes"
+        in_office = "available"
     elif "busy" in text:
         in_office = "busy"
 
-    speak(f"in office mode set to {in_office}")
+    speak(f"Availability set to {in_office}")
     return in_office.lower()
 
 
 def check_in_office(text):
     # You can check mode u are in
-    speak("in office mode is set to " + in_office)
+    speak("your avaialability is set to " + in_office)
     return
 
 
 def in_office_or_home(text):
-    if in_office.lower() == "yes":
+    if in_office.lower() == "available":
         speak("yes, he is around")
-    elif in_office.lower() == "no":
+    elif in_office.lower() == "unavailable":
         speak("No")
         speak("Do you want to leave a note")
         decision = get_command()
         if "yes" in decision:
             message_ = note(secretary=True)
-            #sms_reminder(message_)
+            sms_reminder(message_, secretary=True)
         elif "no" in decision.lower():
             speak("ok sir")
 
@@ -944,8 +1168,8 @@ def in_office_or_home(text):
             return speak("ok sir")
         elif "yes" in decision:
             message_ = note(secretary=True)
-            #sms_reminder(message_)
-    return speak("thank you")
+            sms_reminder(message_, secretary=True)
+    #return speak("thank you")
 
 
 
@@ -958,6 +1182,8 @@ def do_i_have_a_message():
     # Check for unread messages
     messages_exist = False
     messages = []
+
+    speak("Yes sir, you do!")
 
     for filename in os.listdir('secretary'):
         if filename.endswith(".txt") and not filename.endswith("_read.txt"):
@@ -989,7 +1215,9 @@ def secretatry_mode():
     while True:
         text = get_command().lower()
         texts = text.split(" ")
+        print(texts)
         for c in texts:
+            print(c)
             if c in in_office_orhome:
                 in_office_or_home(text)
                 break
@@ -1024,7 +1252,6 @@ def make_schedules():  # This function makes the schedules
             break
         if "p.m." in sch_list or "a.m." in sch_list:  # if time in the schedule, a thread is created and she send me
             # notification for the schedule
-
             thread_obj = threading.Thread(target=sms_reminder, args=[sch_list])
             thread_obj.start()
         speak("ok, next")
@@ -1048,7 +1275,7 @@ def scheduler(command):  # This function gets my schedules and read my schedules
             speak("No sir, do u want to make schedules")
 
             des = get_command().lower()
-            if des.lower() == "yes":
+            if "yes" in des.lower():
                 make_schedules()
             else:
                 speak("ok sir")
@@ -1058,13 +1285,13 @@ def scheduler(command):  # This function gets my schedules and read my schedules
 
             speak("should i read them ?")
             yes_no = get_command().lower()
-            if yes_no == "yes":
+            if "yes" in yes_no:
                 speak("Here are your schedules for today")
                 with open(schedule_path, "r") as file:
                     speak(f"{file.read()},")
 
                 speak("that's all you have for now")
-            elif yes_no == "no":
+            elif "no" in yes_no:
                 speak("ok sir")
 
         elif "check" in command or "what" in command:
@@ -1086,7 +1313,7 @@ def scheduler(command):  # This function gets my schedules and read my schedules
 
                 speak("you dont have any schedule for today, do you want to add")
                 des = get_command.lower()
-                if des == "yes":
+                if "yes" in des:
                     make_schedules()
                 else:
                     speak("ok sir")
@@ -1182,5 +1409,4 @@ def game_choice(choose_level):
 if os.path.isfile(schedule_path):  # Checking if there is a file for todays schedule
     initialise()
     time.sleep(2)
-
 returner()

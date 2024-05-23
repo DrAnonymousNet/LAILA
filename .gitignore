@@ -6,3 +6,5 @@ dist/
 *.egg
 *pycache*
 .env
+*vosk*
+*202*
