@@ -30,14 +30,14 @@ lang_dict = {'Afar': 'aa', 'Abkhazian': 'ab', 'Afrikaans': 'af', 'Amharic': 'am'
 time_related = ['days', 'hours', 'minutes', 'seconds', 'minute', 'hour']
 watch_out = ['tomorrow', 'today']
 week_days = ['sundays', 'mondays', 'tuesday', 'wednesday', 'friday', 'saturday']
-meridiem = ['a.m.', 'p.m.', 'am', 'pm']
-set_alarm_prompt = ["alarm"]
+meridiem = ['a.m.', 'p.m.', 'am', 'pm', "a m", "p m"]
+set_alarm_prompt = ["alarm", "alum", "alarms"]
 send_reminder =["reminder"]
 voice_ = ["voice"]
 text_ = ["text"]
 away_messages_command =  ["messages", "message", "away message"]
 # Note making keyword
-note_str = ["note", "make a note", "write this down", "take this down"]
+note_str = ["note", "make a note", "write this down", "take this down", "notes"]
 
 # calculator keyword
 calculator_term = ['-', '+', '*', '/', 'plus', 'minus', 'multiply', 'divided', 'base']
@@ -51,10 +51,10 @@ wolphram_prompt = ["what is", "define", "integrate", "differentiate", "meaning",
 play_song_command = ["play me a song", "song"]
 news_prompt = ["news", "news headline" , "headline"]
 virtual_key_prompt = ["virtual", "keyboard"]
-translator_prompt = ["translate"]
+translator_prompt = ["translate", "translation", "translates"]
 editor_mode_prompt = ["editor"]
 shut_exit = ["shutdown" , "exit" , "goodnight"]
-natural_language = ["natural language"]
+natural_language = ["natural language", "chat"]
 #About NOORA
 my_self_prompt = ["features" , "yourself"]
 functionalities = ["Calculator functions", "setting reminders", "setting alarm", "playing song", "virtual keyboard", "translator function", "note makeingh", "wiki search" , "mathematical computations", "getting news"]
@@ -64,13 +64,13 @@ offline_features = ["getting calculator", "playing song", "basic mathematical co
 blind_features = ["activating voice command keyboard", "voice input", "opening apps", "voice typing", "note making"]
 
 #SEC MODE
-sec_mode_act = ["sec" , "secretary"]
+sec_mode_act = ["sec" , "secretary", "psychiatry", "secondary", "tree"]
 in_office_orhome = ["office", "home", "around"]
-set_office_home_mode = ["set"]
+set_office_home_mode = ["set","sets"]
 check_in_office_mode = ["check"]
 date_time = ["time" , "date"]
 #SCHEDULER MODE
-sched = ["schedule" , "schedules", "scheduled"]
+sched = ["schedule" , "schedules", "scheduled", "seduced", "shed" ,"should use", "shed use", "dues", "care dues"]
 
 quran = list(range(1 , 115))
 
@@ -135,11 +135,32 @@ ge = ["Guess again !" , "Another guess !" , "again"]
 highest = []
 caller_name = "Ahmad"  # os.environ["USERNAME"]
 
-wakeup_call = ["laila", "elena", "leila", "leyla", "layla",
-               "lila", "Layla"]  # when he hears this (Her name), He wakes up
+wakeup_call = ["laila", "elena", "leila", "leyla", "layla","alila","la la la","lula","alola",
+               "lila", "Layla", "laino", "later"]  # when he hears this (Her name), He wakes up
 greetings = [f"Hello {caller_name}", f"Hi {caller_name}", "You called?"]
 response = ["How can i help you", "What do u need sir"]
+time_units = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+        "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+        "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+        "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+        "fifty": 50, "sixty": 60
+    }
 
+number_units = time_units
 
-
+grammar = ["days", "hours", "minutes", "seconds", "minute", "hour",
+           "tomorrow", "today", "sundays", "mondays", "tuesday", "wednesday", "friday", "saturday",
+           "a.m.", "p.m.", "am", "pm", "a m", "p m",
+           "alarm", "alum", "alarms", "reminder", "voice", "text", "messages", "message", "away message",
+           "note", "make a note", "write this down", "take this down",
+           "-", "+", "*", "/", "plus", "minus", "multiply", "divided", "base",
+           "pop me a calculator", "get me a calculator", "i need a calculator", "give me a calculator", "give me calculator",
+           "activate calculator", "activate calculator mode", "calculator",
+           "about", "who is", "who", "what is", "define", "integrate", "differentiate", "meaning", 'temperature',
+           "play me a song", "song", "news", "news headline", "headline", "virtual", "keyboard", "translate", "translation",
+           "editor", "shutdown", "exit", "goodnight", "natural language", "chat", "features", "yourself",
+           "sec", "secretary", "psychiatry", "secondary", "tree", "office", "home", "around", "set", "sets", "check",
+           "time", "date", "schedule", "schedules", "scheduled", "seduced", "shed", "should use", "shed use", "dues", "care dues", "laila", "elena", "leila", "leyla", "layla","alila","la la la","lula","alola",
+               "lila", "Layla", "laino"]
 

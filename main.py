@@ -1,7 +1,12 @@
 # This is a virtual assistant bot written by Dr.Anonymous
 import datetime
 from dotenv import load_dotenv
-
+from fuzzywuzzy import process
+import spacy
+import fitz  # PyMuPDF
+from docx import Document
+import textwrap
+import re
 import datetime as dt
 import os
 import random
@@ -9,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import requests
 import urllib
 from random import choice
 from typing import Any, Union
@@ -20,7 +26,8 @@ import playsound
 import pyttsx3
 import speech_recognition as sr
 import google.generativeai as genai
-
+# import argostranslate.package
+# import argostranslate.translate
 import wikipedia
 import wolframalpha
 from bs4 import BeautifulSoup as Soup
@@ -34,12 +41,16 @@ import json
 import threading
 import tkinter as tk
 from tkinter import font
+from IPython.display import display
+from IPython.display import Markdown
+
 
 from nooradb import *
 load_dotenv()
 
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=gemini_api_key)
+nlp = spacy.load("en_core_web_sm")
 
 # my_assistants = open_ai_client.beta.assistants.list(
 #     order="desc",
@@ -63,7 +74,7 @@ genai.configure(api_key=gemini_api_key)
 # thread_id = empty_thread.id
 # # in the block above, all needed library are installed
 
-flag = False
+flag = True
 stop_thread = False
 
 app_id = ""
@@ -75,55 +86,87 @@ interrupted = False
 
 ####TRANSCRIPTION
 
-def setup_and_activate_transcription_mode(model_path, samplerate=16000):
-    # Check if the Vosk model path exists
+# def setup_translator():
+
+#     # Download and install Argos Translate package
+#     argostranslate.package.update_package_index()
+#     available_packages = argostranslate.package.get_available_packages()
+#     package_to_install = next(
+#         filter(
+#             lambda x: x.from_code == from_code and x.to_code == to_code, available_packages
+#         )
+#     )
+#     argostranslate.package.install_from_path(package_to_install.download())
+
+# def translate():
+#     from_code = "en"
+#     to_code = "es"
+#     # Translate
+#     translatedText = argostranslate.translate.translate("Hello World", from_code, to_code)
+#     print(translatedText)
+#     # '¡Hola Mundo!'
+
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import datetime
+
+custom_vocabulary_path = "./vocabulary.json"
+def load_custom_vocabulary(filepath):
+    with open(filepath, 'r') as file:
+        return json.load(file)
+    
+custom_vocabulary = load_custom_vocabulary(custom_vocabulary_path)
+
+    
+def setup_and_activate_transcription_mode(model_path, email_to, email_from, email_password, samplerate=16000):
     if not os.path.exists(model_path):
         print(f"Please download the model from https://alphacephei.com/vosk/models and unpack as {model_path}")
         exit(1)
 
-    # Initialize the Vosk model
-    model = vosk.Model(model_path)
-
-    # Create a queue to hold audio data
     q = queue.Queue()
-
-    # List to store the last three complete texts
     recent_texts = ["", "", ""]
+    audio_filename = "recorded_audio.wav"
+    text_filename = "transcribed_text.txt"
+    exit_flag = threading.Event()
 
-    # Callback function to receive audio data
+
     def callback(indata, frames, time, status):
         if status:
             print(status, file=sys.stderr)
         q.put(bytes(indata))
 
-    # Function to continuously listen and recognize speech
     def listen_and_recognize():
-        with sd.RawInputStream(samplerate=samplerate, blocksize=8000, dtype='int16',
-                               channels=1, callback=callback):
+        with sd.RawInputStream(samplerate=samplerate, blocksize=8000, dtype='int16', channels=1, callback=callback):
             rec = vosk.KaldiRecognizer(model, samplerate)
-            while True:
-                data = q.get()
-                if rec.AcceptWaveform(data):
-                    result = json.loads(rec.Result())
-                    add_final_text(result['text'])
-                else:
-                    partial_result = json.loads(rec.PartialResult())
-                    update_partial_text(partial_result['partial'])
 
-    # Function to add final recognized text
+            with open(audio_filename, 'wb') as audio_file:
+                while not exit_flag.is_set():
+                    data = q.get()
+                    audio_file.write(data)
+                    if rec.AcceptWaveform(data):
+                        result = json.loads(rec.Result())
+                        if "exit" in result['text'].lower():
+                            exit_flag.set()
+                        add_final_text(result['text'])
+                    else:
+                        partial_result = json.loads(rec.PartialResult())
+                        update_partial_text(partial_result['partial'])
+
     def add_final_text(text):
-        if text.strip():  # Add only if text is not empty
+        if text.strip():
             recent_texts.append(text)
             if len(recent_texts) > 3:
                 recent_texts.pop(0)
-            update_text_widget()
+            root.after(0, update_text_widget)
+        write_text_to_file(text_filename, text)
 
-    # Function to update the partial recognized text
     def update_partial_text(text):
-        if text.strip():  # Update only if text is not empty
-            update_text_widget(partial_text=text)
+        if text.strip():
+            root.after(0, update_text_widget, text)
 
-    # Function to update the text widget
     def update_text_widget(partial_text=""):
         text_widget.config(state=tk.NORMAL)
         text_widget.delete('1.0', tk.END)
@@ -134,32 +177,77 @@ def setup_and_activate_transcription_mode(model_path, samplerate=16000):
         text_widget.tag_add("center", "1.0", "end")
         text_widget.config(state=tk.DISABLED)
 
-    # Setup Tkinter
+    def write_text_to_file(filename, text):
+        with open(filename, 'a') as file:
+            file.write(text + "\n")
+
+    def send_email_with_attachments():
+        msg = MIMEMultipart()
+        msg['From'] = email_from
+        msg['To'] = email_to
+        msg['Subject'] = "Transcribed Text and Audio"
+
+        body = "Please find the transcribed text and recorded audio attached."
+        msg.attach(MIMEText(body, 'plain'))
+
+        for filename in [audio_filename, text_filename]:
+            attachment = open(filename, "rb")
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload((attachment).read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(filename)}")
+            msg.attach(part)
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(email_from, email_password)
+        text = msg.as_string()
+        server.sendmail(email_from, email_to, text)
+        server.quit()
+
+    def on_closing():
+        exit_flag.set()
+        send_email_thread = threading.Thread(target=send_email_with_attachments)
+        send_email_thread.start()
+        root.destroy()
+
+    def check_exit():
+        if not exit_flag.is_set():
+            root.after(100, check_exit)
+        else:
+            root.quit()
+            send_email_thread = threading.Thread(target=send_email_with_attachments)
+            send_email_thread.start()
+            speak("Ok sir, ")
+            speak("The transcribed text and the audio recording has been sent to your email")
+            root.destroy()
+
+
+
     root = tk.Tk()
     root.title("LAILA Transcription")
-
-    # Make the window take up all available screen size
     root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}")
-
-    # Define a larger font
     large_font = font.Font(size=50)
-
-    # Create and configure the text widget
     global text_widget
     text_widget = tk.Text(root, state=tk.DISABLED, wrap='word', font=large_font)
     text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-    # Add a label that will always be visible
     label = tk.Label(root, text="POWERED BY LAILA", font=large_font, fg="grey")
     label.pack(side=tk.BOTTOM, pady=10)
-
-    # Start the recognition thread
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    root.after(100, check_exit)
     recognition_thread = threading.Thread(target=listen_and_recognize, daemon=True)
     recognition_thread.start()
-
-    # Start the Tkinter main loop
     root.mainloop()
-model_path = "vosk-model-en-us-0.22"
+
+
+
+
+
+
+model_path = "vosk-model-en-us-0.42-gigaspeech"
+email_to = "haryourjb@gmail.com"
+email_from = "haryourjb2@gmail.com"
+email_password = "uxwamdhnnihprlxm"
 
 
 # we have our wolfram api key here
@@ -204,26 +292,49 @@ def interrupt_speak():
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
 
-def chat_with_gpt():
-    threading.Thread(target=interrupt_speak, daemon=True).start()
 
-    speak("natural language activated")
-    prompt = get_input()
-    model = genai.GenerativeModel('gemini-pro')
-    chat = model.start_chat(history=[])
-    while "exit" not in prompt:
-        try:
-            response = chat.send_message(prompt)
+gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}'
+
+headers = {
+    'Content-Type': 'application/json',
+}
+
+
+
+def chat_with_gemini():
+    speak("Hi, How can i help you today ?")
+    conversation = []
+
+    text = get_command()
+    while "exit" not in text:
+        role = "user"
+        
+        conversation.append({
+            "role": role,
+            "parts": [
+                {"text": text}
+            ]
+        })
+        data = {
+            "contents": conversation
+        }
+
+        response = requests.post(gemini_url, headers=headers, data=json.dumps(data))
+
+        if response.status_code == 200:
+            response_json = response.json()
+            for content in response_json.get('contents', []):
+                for part in content.get('parts', []):
+                    if 'text' in part:
+                        speak(part['text'])
+        else:
+            speak(f"Request failed with status code {response.status_code}")
             speak(response.text)
 
-        except ValueError:
-            continue
-        prompt = get_input()
 
-    if 'exit' in prompt:
-        speak("Natural language deactivated")
-
-
+def to_markdown(text):
+  text = text.replace('•', '  *')
+  return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
 
 # def list_voices():
 #     engine = pyttsx3.init()
@@ -232,9 +343,51 @@ def chat_with_gpt():
 #         print(f"Voice {index}: {voice.name}, Gender: {voice.gender}, ID: {voice.id}")
 
 # list_voices()
+model = vosk.Model(model_path)
 
+# Create a queue to hold audio data
+audio_queue = queue.Queue()
+model_path = "vosk-model-en-us-0.42-gigaspeech"
+
+# Callback function to receive audio data
+def callback(indata, frames, time, status):
+    if status:
+        print(status, file=sys.stderr)
+    audio_queue.put(bytes(indata))
 
 def get_audio(wake_up=True):
+    audio_source = os.getenv("AUDIO_SOURCE")
+    if audio_source == "offline":
+        return get_audio_offline(wake_up)
+    return get_audio_with_internet(wake_up)
+
+
+def get_audio_offline(wake_up=True):
+    global flag
+    try:
+        print("listening for command............." if not wake_up else "listening for wake up call")
+
+        # Start audio stream
+        with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16', channels=1, callback=callback):
+            rec = vosk.KaldiRecognizer(model, 16000, f'{grammar}')
+
+            while True:
+                data = audio_queue.get()
+                if rec.AcceptWaveform(data):
+                    result = json.loads(rec.Result())
+                    said = result['text']
+                    print(said)
+                    return said.lower()
+                else:
+                    partial_result = json.loads(rec.PartialResult())
+                    print(partial_result['partial'])
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return get_audio()
+
+
+def get_audio_with_internet(wake_up=True):
     global flag
     try:
         # this function allows voice input command
@@ -379,12 +532,24 @@ def actions(_text):
             print("ok")
             return answer_questions(_text)
         
-        elif natural_language[0] in _text:
-            return chat_with_gpt()
+        elif c in news_prompt or _text in news_prompt:
+            return get_news_head()
+        elif "news" not in text_list and (c in ["read", "reach", "read"] or "read" in text_list) :
+            return handle_read_command(_text)
+        
+        elif c in ["send", "sends", "sent"] and "email" in text_list:
+            return handle_email_command(_text)
+        
+        elif c == "contact" and "add" in text_list:
+            return handle_add_contact_command()
+        
+        elif natural_language[0] in _text or natural_language[1] in _text:
+            return chat_with_gemini()
          
         elif "transcription" in _text:
-            speak("Transciption mode activated")
-            setup_and_activate_transcription_mode(model_path)
+            speak("Transcription mode activated")
+            setup_and_activate_transcription_mode(model_path, email_to, email_from, email_password)
+            returner()
 
 
         elif (c in wolphram_prompt or " ".join(text_list[:count]) in wolphram_prompt) and "yourself" not in _text:
@@ -399,7 +564,11 @@ def actions(_text):
         elif c in set_alarm_prompt or _text in set_alarm_prompt:
             print(c)
             print(_text)
-            time_to_set_alarm_to =  get_alarm_time("alarm " + _text)
+            if os.getenv("AUDIO_SOURCE") == "online":
+                time_to_set_alarm_to =  get_alarm_time("alarm " + _text)
+            else:
+                time_to_set_alarm_to = convert_text_to_time(text_)
+
             alarm_thread = threading.Thread(target=ring_alarm, args=[time_to_set_alarm_to])
             alarm_thread.start()
 
@@ -418,8 +587,7 @@ def actions(_text):
             time.sleep(5)
             returner()
 
-        elif c in news_prompt or _text in news_prompt:
-            return get_news_head()
+
         elif c in my_self_prompt or _text in my_self_prompt:
             return my_self()
         elif c in virtual_key_prompt or _text in virtual_key_prompt:
@@ -430,9 +598,8 @@ def actions(_text):
             pass
         elif c in send_reminder or _text in send_reminder:
             mess = _text.split(" ")
-            reminder_thread = threading.Thread(target=sms_reminder, args=[mess])
-            reminder_thread.start()
-            time.sleep(5)
+            sms_reminder(mess)
+            time.sleep(3)
             return
         elif c in sec_mode_act or _text in sec_mode_act:
             return secretatry_mode()
@@ -494,6 +661,44 @@ def actions(_text):
     elif flag is False:
         change_text()
 
+
+def convert_text_to_time(text):
+
+    # Define AM and PM indicators
+    am_pm_indicators = {"a": "AM", "am": "AM", "p": "PM", "pm": "PM", "p m":"PM","a m":"AM"}
+
+    # Extract the hour and minute
+    if isinstance(text, list):
+        text = " ".join(text)
+    text = text.lower()
+    time_match = re.search(r'(\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)\b)', text)
+    if not time_match:
+        raise ValueError("Invalid time format")
+
+    hour = time_units[time_match.group(1)]
+    text = text.replace(time_match.group(1), '').strip()
+
+    minute_match = re.search(r'(\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)\b)', text)
+    if minute_match:
+        minute = time_units[minute_match.group(1)]
+        text = text.replace(minute_match.group(1), '').strip()
+    else:
+        minute = 0
+
+    # Determine AM/PM
+    am_pm = "AM"  # Default to AM if not specified
+    for indicator in am_pm_indicators:
+        if indicator in text:
+            am_pm = am_pm_indicators[indicator]
+            break
+
+    # Create the time string and convert to datetime object
+    time_str = f"{hour:02}:{minute:02} {am_pm}"
+    time_obj = dt.datetime.strptime(time_str, "%I:%M %p")
+    speak("Alarm set to " + time_obj.strftime("%H:%M %p %A, %d of %B %Y"))
+
+
+    return time_obj
 
 # ABOUT
 def my_self():
@@ -588,24 +793,47 @@ def answer_questions(_text):
 
 
 def translators():
+    retry_counter = 0
     speak("ok sir")
-    speak("what should i translate")
+    speak("which language should i translate to?")
+    to_what = get_command().title()
+    speak(f"Ok sir, I will translate all subsequent words into {to_what}, you can keep them coming now")
+    
     text = get_command()
 
-    try:
-        gs = goslate.Goslate()
+    while "exit" not in text and retry_counter < 5:
+        try:
+            gs = goslate.Goslate()
 
-        speak("which language do u want to translate to")
-        to_what = get_command().title()
-        translated = gs.translate(text, lang_dict[to_what])
 
-        speak(translated)
+            translated = gs.translate(text, lang_dict[to_what])
 
-    except urllib.error.HTTPError:
-        speak("Service overloaded")
-    except urllib.error.URLError:
-        speak("No Network")
+            speak(translated)
 
+        except urllib.error.HTTPError:
+            speak("Service overloaded")
+        except urllib.error.URLError:
+            if retry_counter == 0:
+                speak("No Network right now. Should I hold on till there is network or exit translation mode")
+                decision = get_command()
+                if "exit" in decision:
+                    speak("Ok, I will be exiting the translation mode now")
+                    break
+                else:
+                    speak("I will give it a try for about 5 times and exit this mode if unsuccessful")
+                    retry_counter += 1
+                    continue
+            else:
+                retry_counter += 1
+                continue
+        else:
+            retry_counter = 0
+            text = get_command()
+    if "exit" in text:
+        speak("Exiting translation mode")
+    if retry_counter == 5:
+        speak("I have tried for about 5 times but the network is not yet back. I am exiting the translation mode now")
+    return returner()
 
 
 import os
@@ -643,16 +871,18 @@ def note(secretary=False):
     # Write the message to the file
     if secretary:
         secretary_message(filename, time_str, texts, from_who)
+        return humanize_for_sms(texts, from_who)
     else:
         make_a_note(filename, texts, time_str)
 
     speak("Written, sir.")
-    return humanize_for_sms(texts, from_who)
+
 
 def make_a_note(filename, texts, time_str):
-        # Write the message to the file
+    # Write the message to the file
     with open(filename, "a") as file:
         file.write(f"Time: {convert_to_human_readable_time(time_str)},\nNote: {texts}\n\n")
+
 
 def secretary_message(filename, time_str, texts, from_who):
     with open(filename, "a") as file:
@@ -927,17 +1157,17 @@ def parse_alarm_command(mess):
 def ring_alarm(time_set):
     while dt.datetime.now() < time_set:
         time.sleep(1)
-    playsound.playsound("media/alarm.mp3")
+    playsound.playsound("alarm/alarm.mp3")
     sys.exit()
 
 
 def sms_reminder(mess, secretary=False):
     global reminder_thread
+    time_set = None
     # This handles all form of whatsapp reminders
     print("message:" ,mess)
     if isinstance(mess, str):
         mess = mess.split(" ")
-    client = Client(acc_sid, acc_token)  # The API initiated
     mag = False  # This reminder is accessed by different functions and they all have different foemat
     # So there is need to specify which is which
     for c in mess:
@@ -962,19 +1192,31 @@ def sms_reminder(mess, secretary=False):
             time.sleep(1)
     # if it was accessed by other functiong like the secratery mode, it send the reminder immediately
     # this ishe Twilio sandbox testing number
-    from_number = twilio_phone_number
-    # replace this number with your own WhatsApp Messaging number
-    to_number = '+2348065007606'
+    if not time_set:
+        time_set = datetime.datetime.now()
 
-    if isinstance(mess, list):
-        mess = " ".join(mess)
-    client.messages.create(body=mess,
-                           from_=from_number,
-                           to=to_number)
-    speak("message sent")
+    reminder_thread = threading.Thread(target=send_message, args=[mess, twilio_phone_number, time_set])
+    reminder_thread.start()
     if stop_thread:
         sys.exit(0)
 
+
+def send_message(mess, from_number, time_to_send):
+    wait_until_time_set(time_to_send)
+    to_number = '+2348065007606'
+    client = Client(acc_sid, acc_token)
+    if isinstance(mess, list):
+        mess = " ".join(mess)
+    try:
+        client.messages.create(body=mess, from_=from_number, to=to_number)
+    except:
+        speak("Network is currently unavailable, message will be sent to him later")
+    else:
+        speak("Message sent")
+
+def wait_until_time_set(time_set):
+    while dt.datetime.now() < time_set:
+        time.sleep(1)
 
 # ARITHMETIC FUNCTIONS
 
@@ -1183,7 +1425,6 @@ def do_i_have_a_message():
     messages_exist = False
     messages = []
 
-    speak("Yes sir, you do!")
 
     for filename in os.listdir('secretary'):
         if filename.endswith(".txt") and not filename.endswith("_read.txt"):
@@ -1200,6 +1441,8 @@ def do_i_have_a_message():
             os.rename(file_path, new_file_path)
 
     if messages_exist:
+        speak("Yes sir, you do!")
+
         for message in messages:
             print(message)  # Print messages to console
             speak(message)  # Speak messages
@@ -1230,7 +1473,7 @@ def secretatry_mode():
             elif c in away_messages_command:
                 do_i_have_a_message()
                 break
-            elif c == "exit" or c == "quit":
+            elif "exit" in c or c == "quit":
                 speak("ok sir")
                 returner()
 
@@ -1406,7 +1649,325 @@ def game_choice(choose_level):
         changes(500)
 
 
+
+
+## Book reading feature
+
+
+def read_pdf(file_path, page_number):
+    document = fitz.open(file_path)
+    page = document.load_page(page_number - 1)  # page_number is 1-based
+    text = page.get_text("text")
+    return text
+
+
+def read_docx(file_path, page_number):
+    document = Document(file_path)
+    paragraphs = document.paragraphs
+    # Assuming roughly 30 paragraphs per page, adjust as needed
+    start_index = (page_number - 1) * 30
+    end_index = start_index + 30
+    text = "\n".join([para.text for para in paragraphs[start_index:end_index]])
+    return text
+
+def parse_read_command(command):
+    command = command.lower()
+    if "read" in command:
+        if "from page" in command:
+            match = re.match(r"read (.+) from page (\d+)", command, re.IGNORECASE)
+            if match:
+                book_name = match.group(1).strip()
+                page_number = int(match.group(2).strip())
+                return book_name, page_number
+        elif "read the" in command:
+            match = re.match(r"read the (.+)", command, re.IGNORECASE)
+            if match:
+                book_name = match.group(1).strip()
+                return book_name, None
+        else:
+            return None, None
+    return None, None
+
+def extract_number(input_string):
+    # Use a regular expression to find all numbers in the string
+    numbers = re.findall(r'\d+', input_string)
+    if numbers:
+        # Join all numbers into a single string and convert to integer
+        return int(''.join(numbers))
+    else:
+        raise ValueError("No numbers found in input")
+
+def get_number_literal(text):
+    for word in text.split(" "):
+        if number_units.get(word):
+            return int(number_units.get(word))
+    return
+
+def handle_read_command(command, book_name = None, page_number=None):
+    if not book_name and not page_number:
+        speak("Please provide the book name.")
+        book_name = get_command().strip()
+        speak("Which page do you want me to read from?")
+        while True:
+            try:
+                number = get_command().strip()
+                page_number = extract_number(number)
+            except ValueError:
+                # If no number is found, try to find a number literal
+                page_number = get_number_literal(number)
+                if page_number:
+                    break
+                speak("Sorry, I didn't get the page number, can you repeat that?")
+                continue
+            break
+    elif book_name and not page_number:
+        speak("Which page do you want me to read from?")
+        while True:
+            try:
+                number = get_command().strip()
+                page_number = extract_number(number)
+            except ValueError:
+                # If no number is found, try to find a number literal
+                page_number = get_number_literal(number)
+                if page_number:
+                    break
+                speak("Sorry, I didn't get the page number, can you repeat that?")
+                continue
+            break
+    elif not book_name:
+        speak("Please provide the book name.")
+        book_name = get_command().strip()
+
+    file_path = find_closest_matching_attachments(book_name)
+    if not file_path:
+        speak("Sorry, I couldn't find the book.")
+        return
+    file_path = file_path[0]
+
+    if file_path.endswith(".pdf"):
+        text = read_pdf(file_path, page_number)
+    elif file_path.endswith(".docx"):
+        text = read_docx(file_path, page_number)
+    else:
+        speak("Unsupported file format.")
+        return
+    
+    speak("Okay, I'll read " + book_name + " from page " + str(page_number))
+
+
+    speak(text)
+
+    speak("Should i continue ?")
+    cont = get_command()
+    if "y" in cont:
+        handle_read_command(command="", book_name=book_name, page_number=page_number+1)
+    elif "re" in cont:
+        handle_read_command(command="", book_name=book_name, page_number=page_number)
+    else:
+        speak("Ok, sir")
+
+
+# Contact and Email management
+
+
+def send_email_with_attachments(email_to, subject,  body, attachments):
+    msg = MIMEMultipart()
+    msg['From'] = email_from
+    msg['To'] = email_to
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    for filename in attachments:
+        attachment = open(filename, "rb")
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload((attachment).read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(filename)}")
+        msg.attach(part)
+
+    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server.starttls()
+    server.login(email_from, email_password)
+    text = msg.as_string()
+    server.sendmail(email_from, email_to, text)
+    server.quit()
+
+
+def handle_email_command(command: str):
+    # Debugging removed for production code
+    command = command.replace(",", " ")
+    speak("ok sir!")
+
+    if "send an email to" in command:
+        handle_send_to_email_command(command)
+    elif "send an email" in command:
+        handle_simple_send_email_command()
+    else:
+        speak("I didn't understand the email command.")
+
+def get_message_from_command(command, keyword):
+    parts = command.split(keyword)[1]
+    if "tell him" in command:
+        recipient = parts.split("tell him")[0].strip()
+        message = parts.split("tell him ")[1].strip().replace("to", "")
+    else:
+        recipient = parts.strip()
+        message = None
+    return recipient, message
+
+def handle_send_to_email_command(command):
+    recipient, message = get_message_from_command(command, "send an email to ")
+
+    recipient_email = get_or_ask_for_email(recipient)
+
+    if not message:
+        speak("What should I tell him?")
+        message = get_command()
+    
+    message = transform_to_direct_speech(message)
+
+    subject, attachment = ask_email_details()
+    send_email_async(recipient_email, subject, message, attachment)
+
+def handle_simple_send_email_command():
+    speak("Who would you like to send the email to?")
+    recipient_name = get_command()
+    recipient_email = get_or_ask_for_email(recipient_name)
+
+    subject, message = ask_for_subject_and_message()
+    attachment = ask_for_attachment()
+
+    message = transform_to_direct_speech(message)
+
+
+    send_email_async(recipient_email, subject, message, attachment)
+
+def get_or_ask_for_email(name):
+    email = get_contact_email(name)
+    if not email:
+        speak(f"I don't have an email address for {name}. Please provide the email address.")
+        email = input("Email: ")
+        add_contact(name, email)
+    return email
+
+def ask_email_details():
+    speak("What is the subject of the email?")
+    subject = get_command().title()
+    attachment = ask_for_attachment()
+    return subject, attachment
+
+def ask_for_subject_and_message():
+    speak("What is the subject of the email?")
+    subject = get_command().title()
+    speak("What is the message?")
+    message = get_command()
+    return subject, message
+
+
+def ask_for_attachment():
+    speak("Do you want to add any attachments?")
+    yes_no = get_command().lower()
+    attachments = []
+
+    if 'y' in yes_no:
+        speak("Please provide the name of the attachment.")
+        search_name = get_command().lower()
+        attachments = find_closest_matching_attachments(search_name)
+
+        if attachments:
+            speak(f"Attaching file: {attachments[0]}")
+        else:
+            speak("No matching files found.")
+
+    return attachments
+
+def find_closest_matching_attachments(search_name):
+    directory = "./attachments"  # Specify the path to your attachments directory
+    files_list = [os.path.join(directory, f) for f in os.listdir(directory)]
+    file_names_without_extension = [os.path.splitext(os.path.basename(f))[0] for f in files_list]
+
+    # Find the closest match to the search name
+    closest_match = process.extractOne(search_name, file_names_without_extension)
+
+    if closest_match:
+        # Get the index of the closest match to find the corresponding full path file
+        index = file_names_without_extension.index(closest_match[0])
+        return [files_list[index]]
+    return []
+
+def transform_to_direct_speech(text):
+    doc = nlp(text)
+    transformed_sentences = []
+    skip_next = False
+
+    for sent in doc.sents:
+        # Process each sentence to find "tell him" and modify accordingly
+        parts = [token for token in sent if not skip_next]
+        for token in parts:
+            if token.lower_ in ["tell", "ask", "instruct", "order"] and token.nbor().lower_ == "him":
+                # Create a new sentence from this point
+                start_index = token.idx + len("tell him ")
+                new_sentence = sent.text[start_index:].strip()
+                # Change pronouns and adjust verbs in the new sentence
+                new_sentence = nlp(new_sentence)
+                for word in new_sentence:
+                    if word.lower() == "i":
+                        new_sentence = new_sentence.text.replace(" I ", " you ")
+                    if word.lower() == "my":
+                        new_sentence = new_sentence.text.replace(" my ", " your ")
+                    if word.lower() == "all of them":
+                        new_sentence = new_sentence.text.replace(" all of them", " all of you")
+                transformed_sentences.append(new_sentence)
+                skip_next = True
+            else:
+                skip_next = False
+    if transformed_sentences == []:
+        return text
+    return ' '.join(transformed_sentences)
+
+def send_email_async(email, subject, message, attachments):
+    send_email_thread = threading.Thread(target=send_email_with_attachments, args=[email, subject, message, attachments])
+    send_email_thread.start()
+    speak("ok sir!, I will send the email right away!")
+
+
+
+# File to store email contacts
+CONTACTS_FILE = 'email_contacts.json'
+
+# Initialize contacts file
+def init_contacts():
+    if not os.path.exists(CONTACTS_FILE):
+        with open(CONTACTS_FILE, 'w') as file:
+            json.dump({}, file)
+
+# Add a contact
+def add_contact(name, email):
+    with open(CONTACTS_FILE, 'r') as file:
+        contacts = json.load(file)
+    contacts[name.lower()] = email
+    with open(CONTACTS_FILE, 'w') as file:
+        json.dump(contacts, file)
+
+# Get contact email by name
+def get_contact_email(name):
+    with open(CONTACTS_FILE, 'r') as file:
+        contacts = json.load(file)
+    return contacts.get(name.lower())
+
+def handle_add_contact_command():
+    speak("What is the name of the contact? Type it so that i can get it properly")
+    name = input("Name: ")
+    speak("What is the email address of the contact?")
+    email = input("Email: ")
+    add_contact(name, email)
+    speak(f"Contact {name} with email {email} has been added.")
+
+# Initialize contacts on first run
+
 if os.path.isfile(schedule_path):  # Checking if there is a file for todays schedule
     initialise()
     time.sleep(2)
+init_contacts()
 returner()

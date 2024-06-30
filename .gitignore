@@ -8,3 +8,8 @@ dist/
 .env
 *vosk*
 *202*
+*mp3
+*wav
+*transcribed*
+*pdf
+*slt
